@@ -17,6 +17,7 @@ const newsRoutes = require('./routes/newsRoutes');
 const portfolioRoutes = require('./routes/portfolioRoutes');
 
 const app = express();
+const { startScheduler } = require('./scheduler/refreshScheduler');
 
 // Middlewares
 app.use(helmet());
@@ -50,7 +51,12 @@ async function start() {
     await mongoose.connect(mongoUri, { dbName: process.env.MONGO_DB || undefined });
     // eslint-disable-next-line no-console
     console.log('MongoDB connected');
-    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+      // Start scheduler if enabled
+      const baseUrl = process.env.BASE_URL || `http://localhost:${PORT}`;
+      startScheduler(baseUrl);
+    });
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error('Failed to start server:', err);
