@@ -3,7 +3,7 @@
   Purpose: Define portfolio-related API endpoints for holdings, positions, and updates.
 */
 const express = require('express');
-const { getPortfolio } = require('../controller/portfolioController');
+const { getPortfolio } = require('../controllers/portfolioController');
 const { protect } = require('../middlewares/authMiddleware');
 
 const router = express.Router();
