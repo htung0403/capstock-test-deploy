@@ -9,6 +9,7 @@ import Navbar from './components/Navbar';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
+import StockDetail from './pages/StockDetail';
 
 function App() {
   return (
@@ -26,6 +27,14 @@ function App() {
                   element={
                     <ProtectedRoute>
                       <Dashboard />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/stocks/:symbol" 
+                  element={
+                    <ProtectedRoute>
+                      <StockDetail />
                     </ProtectedRoute>
                   } 
                 />

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { Link } from 'react-router-dom';
 import api from '../services/api';
 
 const Dashboard = () => {
@@ -69,7 +70,7 @@ const Dashboard = () => {
             {stocks.length > 0 ? (
               <div className="flex flex-col gap-3">
                 {stocks.slice(0, 8).map((stock) => (
-                  <div key={stock._id} className="flex justify-between items-center" style={{ padding: '.75rem', background: 'rgba(148,163,184,.06)', borderRadius: '.75rem', border: '1px solid rgba(148,163,184,.1)' }}>
+                  <Link key={stock._id} to={`/stocks/${stock.symbol}`} className="flex justify-between items-center" style={{ padding: '.75rem', background: 'rgba(148,163,184,.06)', borderRadius: '.75rem', border: '1px solid rgba(148,163,184,.1)', textDecoration: 'none' }}>
                     <div>
                       <div style={{ fontWeight: 700 }}>{stock.symbol}</div>
                       <div className="text-muted" style={{ fontSize: '.875rem' }}>{stock.name}</div>
@@ -78,7 +79,7 @@ const Dashboard = () => {
                       <div style={{ fontWeight: 700 }}>${stock.currentPrice}</div>
                       <div className="text-muted" style={{ fontSize: '.75rem' }}>per share</div>
                     </div>
-                  </div>
+                  </Link>
                 ))}
               </div>
             ) : (
