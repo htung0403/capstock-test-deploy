@@ -15,6 +15,7 @@ const orderRoutes = require('./routes/orderRoutes');
 const transactionRoutes = require('./routes/transactionRoutes');
 const newsRoutes = require('./routes/newsRoutes');
 const portfolioRoutes = require('./routes/portfolioRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
 
 const app = express();
 const { startScheduler } = require('./scheduler/refreshScheduler');
@@ -32,6 +33,7 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/news', newsRoutes);
 app.use('/api/portfolio', portfolioRoutes);
+app.use('/api/payments', paymentRoutes);
 
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
