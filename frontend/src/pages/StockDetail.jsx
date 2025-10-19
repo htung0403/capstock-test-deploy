@@ -12,6 +12,11 @@ import {
   ReferenceLine,
 } from 'recharts';
 import api from '../services/api';
+import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../components/Toast';
+import SellModal from '../components/SellModal';
+import BuyModal from '../components/BuyModal';
 
 const TIMEFRAMES = [
   { key: '1D', label: '1D', ms: 1 * 24 * 60 * 60 * 1000 },
@@ -36,26 +41,44 @@ function formatXAxisLabel(isoStr, timeframeKey) {
   return d.toLocaleDateString();
 }
 
-function CustomTooltip({ active, payload, label }) {
+function CustomTooltip({ active, payload, label, isDark }) {
   if (!active || !payload || !payload.length) return null;
   const p = payload[0]?.payload;
   return (
-    <div style={{ background: 'rgba(2,6,23,.95)', color: '#e2e8f0', padding: '.5rem .75rem', borderRadius: '.5rem', boxShadow: '0 6px 24px rgba(0,0,0,.35)', border: '1px solid rgba(148,163,184,.2)' }}>
-      <div style={{ fontSize: 12, opacity: .8, marginBottom: 4 }}>{label}</div>
-      <div style={{ fontWeight: 800, color: '#22d3ee' }}>{formatCurrency(p.price)}</div>
-      <div style={{ fontSize: 12, opacity: .85 }}>Vol: {p.volume?.toLocaleString?.() || p.volume}</div>
+    <div className={`px-3 py-2 rounded-lg shadow-2xl border ${
+      isDark 
+        ? 'bg-slate-900/95 text-slate-200 border-slate-400/20' 
+        : 'bg-white/95 text-slate-800 border-slate-300/50'
+    }`}>
+      <div className="text-xs opacity-80 mb-1">{label}</div>
+      <div className="font-extrabold text-cyan-500">{formatCurrency(p.price)}</div>
+      <div className="text-xs opacity-85">Vol: {p.volume?.toLocaleString?.() || p.volume}</div>
     </div>
   );
 }
 
 export default function StockDetail() {
   const { symbol } = useParams();
+  const { theme } = useTheme();
+  const { user, refreshUser } = useAuth();
+  const { show } = useToast();
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [timeframe, setTimeframe] = useState('ALL');
   const [chartType, setChartType] = useState('area'); // 'area' | 'line'
   const [refreshing, setRefreshing] = useState(false);
+  
+  // Buy stock state
+  const [showBuyModal, setShowBuyModal] = useState(false);
+  
+  // Sell stock state
+  const [showSellModal, setShowSellModal] = useState(false);
+  
+  // Portfolio state
+  const [userHolding, setUserHolding] = useState(null);
+  
+  const isDark = theme === 'dark';
 
   const fetchHistory = useCallback(async () => {
     try {
@@ -82,6 +105,24 @@ export default function StockDetail() {
     })();
   }, [fetchHistory]);
 
+  const fetchUserHolding = useCallback(async () => {
+    if (!user || !symbol) return;
+    
+    try {
+      const response = await api.get('/portfolio');
+      const holding = response.data.find(h => h.stock.symbol === symbol.toUpperCase());
+      setUserHolding(holding || null);
+    } catch (error) {
+      console.error('Error fetching user holding:', error);
+    }
+  }, [user, symbol]);
+
+  useEffect(() => {
+    if (user) {
+      fetchUserHolding();
+    }
+  }, [fetchUserHolding]);
+
   const onRefreshNow = useCallback(async () => {
     try {
       setRefreshing(true);
@@ -94,14 +135,44 @@ export default function StockDetail() {
     }
   }, [symbol, fetchHistory]);
 
+  const handleSellSuccess = () => {
+    // Refresh user data and portfolio after selling
+    refreshUser();
+    fetchUserHolding();
+  };
+
+  const handleBuySuccess = () => {
+    // Refresh user data and portfolio after buying
+    refreshUser();
+    fetchUserHolding();
+  };
+
   const latest = history.length ? history[history.length - 1] : null;
   const first = history.length ? history[0] : null;
   const change = latest && first ? latest.price - first.price : 0;
   const changePct = latest && first && first.price ? (change / first.price) * 100 : 0;
 
-  // Modern cyan theme (good on light/dark panels)
-  const accent = '#06b6d4'; // cyan-500
-  const accentSoft = '#22d3ee'; // cyan-400
+  // Prepare stock data for SellModal
+  const stockForModal = latest ? {
+    symbol: symbol,
+    currentPrice: latest.price,
+    name: symbol // We could add more stock info here if available
+  } : null;
+
+  const marketData = {
+    change,
+    changePct
+  };
+
+  // Theme-aware colors
+  const chartColors = {
+    accent: '#06b6d4', // cyan-500
+    accentSoft: '#22d3ee', // cyan-400
+    grid: isDark ? 'rgba(148,163,184,0.2)' : 'rgba(148,163,184,0.35)',
+    text: isDark ? 'rgba(226,232,240,0.85)' : 'rgba(30,41,59,0.85)',
+    cursor: isDark ? 'rgba(34,211,238,0.55)' : 'rgba(14,165,233,0.55)',
+    referenceLine: isDark ? 'rgba(148,163,184,0.4)' : 'rgba(148,163,184,0.6)'
+  };
 
   const chartData = useMemo(() => {
     return (history || []).map((h) => ({
@@ -112,22 +183,22 @@ export default function StockDetail() {
   }, [history]);
 
   return (
-    <div className="container" style={{ padding: '1rem 1rem 2rem' }}>
+    <div className="container px-4 pb-8 pt-4">
       {/* Header with symbol and key stats */}
-      <div className="card" style={{ marginBottom: '1rem' }}>
-        <div className="card-header" style={{ alignItems: 'center' }}>
+      <div className="card mb-4">
+        <div className="card-header items-center">
           <div>
-            <div className="card-title" style={{ display: 'flex', gap: '.5rem', alignItems: 'baseline' }}>
+            <div className="card-title flex items-baseline gap-2">
               <span>{symbol}</span>
               {latest ? (
-                <span style={{ fontSize: '1.25rem', fontWeight: 800, color: accentSoft }}>
+                <span className="text-xl font-extrabold text-cyan-400">
                   {formatCurrency(latest.price)}
                 </span>
               ) : null}
             </div>
             <div className="card-subtle">
               {latest ? (
-                <span style={{ color: change >= 0 ? '#16a34a' : '#dc2626', fontWeight: 600 }}>
+                <span className={`font-semibold ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                   {change >= 0 ? '+' : ''}{change.toFixed(2)} ({changePct.toFixed(2)}%)
                 </span>
               ) : (
@@ -135,7 +206,7 @@ export default function StockDetail() {
               )}
             </div>
           </div>
-          <div className="flex" style={{ gap: '.5rem' }}>
+          <div className="flex gap-2">
             <button className="btn btn-outline" onClick={onRefreshNow} disabled={refreshing}>
               {refreshing ? 'Refreshing...' : 'Refresh now'}
             </button>
@@ -143,8 +214,8 @@ export default function StockDetail() {
         </div>
 
         {/* Toolbar */}
-        <div className="flex items-center justify-between" style={{ padding: '0 .75rem .75rem' }}>
-          <div className="flex" style={{ gap: '.5rem', flexWrap: 'wrap' }}>
+        <div className="flex items-center justify-between px-3 pb-3">
+          <div className="flex gap-2 flex-wrap">
             {TIMEFRAMES.map((tf) => (
               <button
                 key={tf.key}
@@ -155,7 +226,7 @@ export default function StockDetail() {
               </button>
             ))}
           </div>
-          <div className="flex" style={{ gap: '.5rem' }}>
+          <div className="flex gap-2">
             <button
               className={`btn ${chartType === 'area' ? 'btn-primary' : 'btn-outline'}`}
               onClick={() => setChartType('area')}
@@ -172,45 +243,83 @@ export default function StockDetail() {
         </div>
 
         {/* Chart */}
-        <div style={{ width: '100%', height: 460, background: 'var(--panel, #fff)', borderTop: '1px solid rgba(148,163,184,.15)' }}>
+        <div className={`w-full h-[460px] border-t transition-colors duration-200 ${
+          isDark 
+            ? 'bg-slate-900/50 border-slate-700/30' 
+            : 'bg-white border-slate-200/50'
+        }`}>
           {loading ? (
-            <div className="flex items-center justify-center" style={{ height: '100%' }}>Loading chart...</div>
+            <div className="flex items-center justify-center h-full text-slate-600 dark:text-slate-400">
+              Loading chart...
+            </div>
           ) : error ? (
-            <div className="flex items-center justify-center" style={{ height: '100%', color: 'red' }}>{error}</div>
+            <div className="flex items-center justify-center h-full text-red-600 dark:text-red-400">
+              {error}
+            </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
                 <defs>
                   <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={accent} stopOpacity={0.35} />
-                    <stop offset="100%" stopColor={accent} stopOpacity={0} />
+                    <stop offset="0%" stopColor={chartColors.accent} stopOpacity={isDark ? 0.25 : 0.35} />
+                    <stop offset="100%" stopColor={chartColors.accent} stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" opacity={0.35} />
+                <CartesianGrid 
+                  strokeDasharray="3 3" 
+                  stroke={chartColors.grid}
+                />
                 <XAxis
                   dataKey="time"
-                  tick={{ fontSize: 12, fill: 'rgba(30,41,59,.85)' }}
+                  tick={{ fontSize: 12, fill: chartColors.text }}
                   minTickGap={24}
                   tickFormatter={(value) => formatXAxisLabel(value, timeframe)}
+                  axisLine={{ stroke: chartColors.grid }}
+                  tickLine={{ stroke: chartColors.grid }}
                 />
                 <YAxis
                   domain={["auto", "auto"]}
-                  tick={{ fontSize: 12, fill: 'rgba(30,41,59,.85)' }}
+                  tick={{ fontSize: 12, fill: chartColors.text }}
                   tickFormatter={(v) => formatCurrency(v)}
+                  axisLine={{ stroke: chartColors.grid }}
+                  tickLine={{ stroke: chartColors.grid }}
                 />
                 <Tooltip
-                  content={<CustomTooltip />}
+                  content={<CustomTooltip isDark={isDark} />}
                   labelFormatter={(v) => formatXAxisLabel(v, timeframe)}
-                  cursor={{ stroke: 'rgba(14,165,233,.55)', strokeWidth: 1 }}
+                  cursor={{ stroke: chartColors.cursor, strokeWidth: 1 }}
                 />
                 {first && (
-                  <ReferenceLine y={first.price} stroke="rgba(148,163,184,.5)" strokeDasharray="3 3" />
+                  <ReferenceLine 
+                    y={first.price} 
+                    stroke={chartColors.referenceLine} 
+                    strokeDasharray="3 3" 
+                  />
                 )}
                 {chartType === 'area' && (
-                  <Area type="monotone" dataKey="price" stroke={accent} fill="url(#priceGradient)" strokeWidth={2.25} dot={false} />
+                  <Area 
+                    type="monotone" 
+                    dataKey="price" 
+                    stroke={chartColors.accent} 
+                    fill="url(#priceGradient)" 
+                    strokeWidth={2.25} 
+                    dot={false} 
+                  />
                 )}
                 {chartType === 'line' && (
-                  <Line type="monotone" dataKey="price" stroke={accent} dot={false} strokeWidth={2.25} activeDot={{ r: 3, stroke: accentSoft, strokeWidth: 2 }} />
+                  <Line 
+                    type="monotone" 
+                    dataKey="price" 
+                    stroke={chartColors.accent} 
+                    dot={false} 
+                    strokeWidth={2.25} 
+                    activeDot={{ 
+                      r: 3, 
+                      stroke: chartColors.accentSoft, 
+                      strokeWidth: 2,
+                      fill: isDark ? chartColors.accentSoft : chartColors.accent
+                    }} 
+                  />
                 )}
               </LineChart>
             </ResponsiveContainer>
@@ -218,28 +327,73 @@ export default function StockDetail() {
         </div>
       </div>
 
-      {/* Actions panel (placeholders for future trading actions) */}
-      <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+      {/* Actions panel */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="card">
           <div className="card-header">
-            <div className="card-title">Quick Trade</div>
-            <span className="card-subtle">Place a mock order (coming soon)</span>
+            <div className="card-title">💰 Quick Trade</div>
+            <span className="card-subtle">Mua cổ phiếu với giá thị trường</span>
           </div>
-          <div className="flex" style={{ gap: '.5rem' }}>
-            <button className="btn btn-primary" disabled>Buy</button>
-            <button className="btn btn-secondary" disabled>Sell</button>
+          <div className="space-y-4">
+            {latest && (
+              <div className="text-sm text-slate-600 dark:text-slate-400">
+                <p>Giá hiện tại: <span className="font-bold text-cyan-500">{formatCurrency(latest.price)}</span></p>
+                <p>Số dư: <span className="font-bold text-green-600 dark:text-green-400">{formatCurrency(user?.balance || 0)}</span></p>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button 
+                className="btn btn-primary flex-1"
+                onClick={() => setShowBuyModal(true)}
+                disabled={!latest?.price}
+              >
+                💳 Mua
+              </button>
+              {latest?.price && userHolding ? (
+                <button 
+                  className="btn btn-secondary flex-1"
+                  onClick={() => setShowSellModal(true)}
+                >
+                  📉 Bán
+                </button>
+              ) : (
+                <button className="btn btn-secondary flex-1" disabled>
+                  📈 Bán {userHolding ? '' : '(Không có cổ phiếu)'}
+                </button>
+              )}
+            </div>
           </div>
         </div>
         <div className="card">
           <div className="card-header">
-            <div className="card-title">Alerts</div>
-            <span className="card-subtle">Set price alerts (coming soon)</span>
+            <div className="card-title">🔔 Alerts</div>
+            <span className="card-subtle">Đặt cảnh báo giá (sắp có)</span>
           </div>
-          <div className="flex" style={{ gap: '.5rem' }}>
-            <button className="btn btn-outline" disabled>Create Alert</button>
+          <div className="flex gap-2">
+            <button className="btn btn-outline flex-1" disabled>
+              Tạo cảnh báo
+            </button>
           </div>
         </div>
       </div>
+
+      {/* Buy Modal Component */}
+      <BuyModal
+        isOpen={showBuyModal}
+        onClose={() => setShowBuyModal(false)}
+        stock={stockForModal}
+        onBuySuccess={handleBuySuccess}
+      />
+
+      {/* Sell Modal Component */}
+      <SellModal
+        isOpen={showSellModal}
+        onClose={() => setShowSellModal(false)}
+        stock={stockForModal}
+        userHolding={userHolding}
+        onSellSuccess={handleSellSuccess}
+        marketData={marketData}
+      />
     </div>
   );
 }

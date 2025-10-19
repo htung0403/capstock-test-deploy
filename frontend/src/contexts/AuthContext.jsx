@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
 import { useToast } from '../components/Toast';
 
@@ -68,18 +68,54 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
+  const logout = useCallback(() => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setUser(null);
     show('Đã đăng xuất', 'info');
-  };
+  }, [show]);
+
+  // Function để refresh user data từ server
+  const refreshUser = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('token');
+      console.log("🔍 RefreshUser called, token exists:", !!token);
+
+      if (!token) {
+        console.log("❌ No token found");
+        return;
+      }
+
+      console.log("📡 Calling API /users/profile...");
+      const response = await api.get('/users/profile');
+      const userData = response.data;
+
+      console.log("✅ API Response:", userData);
+      console.log("💰 User balance:", userData.balance);
+
+      localStorage.setItem('user', JSON.stringify(userData));
+      setUser(userData);
+
+      return userData;
+    } catch (error) {
+      console.error('❌ Error refreshing user data:', error);
+      console.error('❌ Error response:', error.response?.data);
+
+      // Nếu token hết hạn, logout user
+      if (error.response?.status === 401) {
+        console.log("🚪 Token expired, logging out...");
+        logout();
+      }
+      throw error;
+    }
+  }, [logout]);
 
   const value = {
     user,
     login,
     register,
     logout,
+    refreshUser,
     loading,
     isAuthenticated: !!user,
   };
