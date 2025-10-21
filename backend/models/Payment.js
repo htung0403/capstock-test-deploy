@@ -50,6 +50,18 @@ const PaymentSchema = new mongoose.Schema(
       accountName: { type: String }
     },
     
+    // Thông tin MoMo
+    momoInfo: {
+      payUrl: { type: String }, // URL để redirect user đến MoMo
+      deeplink: { type: String }, // Deep link để mở MoMo app
+      qrCodeUrl: { type: String }, // QR code URL để scan
+      transId: { type: String }, // Transaction ID từ MoMo
+      payType: { type: String }, // Phương thức thanh toán (webApp, qr, napas...)
+      responseTime: { type: String }, // Thời gian response từ MoMo
+      resultCode: { type: Number }, // Result code từ IPN
+      message: { type: String } // Message từ MoMo
+    },
+    
     // Thông tin giao dịch
     transactionId: { type: String }, // ID từ payment gateway
     description: { type: String },
