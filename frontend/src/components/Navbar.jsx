@@ -158,6 +158,21 @@ const Navbar = () => {
                       Lệnh giao dịch
                     </Link>
 
+                    {/* New Link for AI Chat Page */}
+                    <Link
+                      to="/chatbot"
+                      className="flex items-center gap-3 px-4 py-2 text-sm transition-colors"
+                      style={{ color: 'var(--text)' }}
+                      onMouseEnter={(e) => e.target.style.backgroundColor = 'rgba(148,163,184,0.1)'}
+                      onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                      onClick={() => setIsDropdownOpen(false)}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 01-9 9m-9-9a9 9 0 019-9m0 18c1.333 0 2.667-.45 4-1.35m-4 1.35c-1.333 0-2.667-.45-4-1.35m4-1.35V3m-4 10v1m-4-7v1m-4 7v1m14-7v1m4 7v1m-4-7V3m-4 10v1m-4-7v1m-4 7v1m14-7v1m4 7v1" />
+                      </svg>
+                      AI Chat
+                    </Link>
+
                     <div className="border-t mt-1" style={{ borderColor: 'var(--border)' }}>
                       <button
                         onClick={() => {

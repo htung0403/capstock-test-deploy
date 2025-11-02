@@ -1,3 +1,10 @@
+/*
+  File: frontend/src/App.jsx
+  Purpose: Main application component, sets up routing, context providers, and global layout.
+  
+  CHANGES (2025-10-20):
+  - Added a new route for the `/chatbot` page, protected by `ProtectedRoute`.
+*/
 import React from "react";
 import {
   BrowserRouter as Router,
@@ -18,6 +25,7 @@ import StockDetail from "./pages/StockDetail";
 import Payment from "./pages/Payment";
 import Profile from "./pages/Profile";
 import Orders from "./pages/Orders";
+import AIChatPage from "./pages/AIChatPage"; // Import the new AI Chat Page
 
 function App() {
   return (
@@ -43,6 +51,14 @@ function App() {
                   element={
                     <ProtectedRoute>
                       <StockDetail />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/chatbot"
+                  element={
+                    <ProtectedRoute>
+                      <AIChatPage />
                     </ProtectedRoute>
                   }
                 />

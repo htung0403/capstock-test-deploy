@@ -1,3 +1,11 @@
+/*
+  File: frontend/src/pages/StockDetail.jsx
+  Purpose: Displays detailed information about a single stock, including historical data, trading options, and AI analysis.
+  
+  CHANGES (2025-10-20):
+  - Added AI Advisor Analysis panel to display comprehensive stock analysis (sentiment, trends, recommendations).
+  - Integrated `AIChatWidget` to provide a floating chat interface for AI interaction with stock-specific context.
+*/
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import {
@@ -17,6 +25,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
 import SellModal from '../components/SellModal';
 import BuyModal from '../components/BuyModal';
+import AIChatWidget from '../components/AIChatWidget'; // Import the AI Chat Widget
 
 const TIMEFRAMES = [
   { key: '1D', label: '1D', ms: 1 * 24 * 60 * 60 * 1000 },
@@ -68,6 +77,11 @@ export default function StockDetail() {
   const [timeframe, setTimeframe] = useState('ALL');
   const [chartType, setChartType] = useState('area'); // 'area' | 'line'
   const [refreshing, setRefreshing] = useState(false);
+  
+  // AI Analysis state
+  const [aiAnalysis, setAiAnalysis] = useState(null);
+  const [loadingAIAnalysis, setLoadingAIAnalysis] = useState(false);
+  const [aiAnalysisError, setAiAnalysisError] = useState('');
   
   // Buy stock state
   const [showBuyModal, setShowBuyModal] = useState(false);
@@ -134,6 +148,22 @@ export default function StockDetail() {
       setRefreshing(false);
     }
   }, [symbol, fetchHistory]);
+
+  const fetchAIAnalysis = useCallback(async () => {
+    setLoadingAIAnalysis(true);
+    setAiAnalysisError('');
+    try {
+      const res = await api.get(`/ai/analysis/${symbol}`);
+      setAiAnalysis(res.data.analysis);
+      show('success', `AI analysis for ${symbol} completed.`);
+    } catch (e) {
+      const errorMessage = e?.response?.data?.message || e.message;
+      setAiAnalysisError(errorMessage);
+      show('error', `AI analysis failed: ${errorMessage}`);
+    } finally {
+      setLoadingAIAnalysis(false);
+    }
+  }, [symbol, show]);
 
   const handleSellSuccess = () => {
     // Refresh user data and portfolio after selling
@@ -328,7 +358,7 @@ export default function StockDetail() {
       </div>
 
       {/* Actions panel */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
         <div className="card">
           <div className="card-header">
             <div className="card-title">💰 Quick Trade</div>
@@ -377,6 +407,42 @@ export default function StockDetail() {
         </div>
       </div>
 
+      {/* AI Assistant Panel */}
+      <div className="card mb-4">
+        <div className="card-header items-center">
+          <div className="card-title">🤖 AI Advisor Analysis</div>
+          <button 
+            className="btn btn-primary"
+            onClick={fetchAIAnalysis}
+            disabled={loadingAIAnalysis}
+          >
+            {loadingAIAnalysis ? 'Analyzing...' : 'Analyze with AI'}
+          </button>
+        </div>
+        {aiAnalysisError && (
+          <div className="text-red-600 dark:text-red-400 p-3">Error: {aiAnalysisError}</div>
+        )}
+        {aiAnalysis ? (
+          <div className="p-4 space-y-3">
+            <p><strong>Overall Sentiment:</strong> <span className={`font-semibold ${aiAnalysis.sentiment === 'Positive' ? 'text-green-600' : aiAnalysis.sentiment === 'Negative' ? 'text-red-600' : 'text-yellow-600'}`}>{aiAnalysis.sentiment}</span></p>
+            <p><strong>Short-Term Trend:</strong> <span className={`font-semibold ${aiAnalysis.price_trends.short_term_trend === 'Bullish' ? 'text-green-600' : aiAnalysis.price_trends.short_term_trend === 'Bearish' ? 'text-red-600' : 'text-yellow-600'}`}>{aiAnalysis.price_trends.short_term_trend}</span></p>
+            <p><strong>Long-Term Trend:</strong> <span className={`font-semibold ${aiAnalysis.price_trends.long_term_trend === 'Bullish' ? 'text-green-600' : aiAnalysis.price_trends.long_term_trend === 'Bearish' ? 'text-red-600' : 'text-yellow-600'}`}>{aiAnalysis.price_trends.long_term_trend}</span></p>
+            <p><strong>Profit Potential:</strong> <span className="font-semibold text-cyan-500">{aiAnalysis.profit_potential}</span></p>
+            <p><strong>Risk Level:</strong> <span className="font-semibold text-orange-500">{aiAnalysis.risk_level}</span></p>
+            {aiAnalysis.price_trends.ma_short && (
+                <p><strong>MA (10 days):</strong> {formatCurrency(aiAnalysis.price_trends.ma_short)}</p>
+            )}
+            {aiAnalysis.price_trends.ma_long && (
+                <p><strong>MA (50 days):</strong> {formatCurrency(aiAnalysis.price_trends.ma_long)}</p>
+            )}
+          </div>
+        ) : ( !loadingAIAnalysis && !aiAnalysisError && 
+          <div className="p-4 text-slate-600 dark:text-slate-400">
+            Click "Analyze with AI" to get a comprehensive analysis for {symbol}.
+          </div>
+        )}
+      </div>
+
       {/* Buy Modal Component */}
       <BuyModal
         isOpen={showBuyModal}
@@ -394,6 +460,9 @@ export default function StockDetail() {
         onSellSuccess={handleSellSuccess}
         marketData={marketData}
       />
+
+      {/* AI Chat Widget */}
+      <AIChatWidget stockSymbol={symbol} />
     </div>
   );
 }
