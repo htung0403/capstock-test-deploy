@@ -21,6 +21,7 @@ import visaLogo from "../assets/card_logo/visa.svg";
 import mastercardLogo from "../assets/card_logo/mastercard.svg";
 import amexLogo from "../assets/card_logo/amex.svg";
 import jcbLogo from "../assets/card_logo/jcb.svg";
+import momoLogo from "../assets/card_logo/momo.svg";
 
 // Card logo mapping
 const CARD_LOGOS = {
@@ -28,6 +29,7 @@ const CARD_LOGOS = {
   MASTERCARD: mastercardLogo,
   AMEX: amexLogo,
   JCB: jcbLogo,
+  MOMO: momoLogo,
 };
 
 const BANKS = [
@@ -40,12 +42,12 @@ const BANKS = [
 function Payment() {
   const { user } = useAuth();
   const { theme } = useTheme();
-  const { show } = useToast();
-  const [paymentMethod, setPaymentMethod] = useState("CARD"); // CARD or QR
+  const { show: showToast } = useToast(); // Rename show to showToast
+  const [paymentMethod, setPaymentMethod] = useState("CARD"); // CARD, QR, or MOMO
   const [loading, setLoading] = useState(false);
   const [qrData, setQrData] = useState(null);
-  
-  const isDark = theme === 'dark';
+
+  const isDark = theme === "dark";
 
   // Card payment state
   const [cardData, setCardData] = useState({
@@ -66,70 +68,78 @@ function Payment() {
     bankName: "VIETCOMBANK",
   });
 
+  // MoMo payment state
+  const [momoData, setMomoData] = useState({
+    amount: "",
+  });
+
   // Validation function
   const validateCardData = () => {
     const errors = {};
-    
+
     // Validate amount
-    const amountValue = parseFloat(cardData.amount.replace(/\./g, ''));
+    const amountValue = parseFloat(cardData.amount.replace(/\./g, ""));
     if (!cardData.amount || amountValue <= 0) {
-      errors.amount = 'Vui lòng nhập số tiền hợp lệ';
+      errors.amount = "Vui lòng nhập số tiền hợp lệ";
     } else if (amountValue < 1000) {
-      errors.amount = 'Số tiền tối thiểu là 1.000';
+      errors.amount = "Số tiền tối thiểu là 1.000";
     }
-    
+
     // Validate card number
     if (!cardData.cardNumber) {
-      errors.cardNumber = 'Vui lòng nhập số thẻ';
-    } else if (!detectedCardType && cardData.cardNumber.replace(/\s/g, '').length >= 16) {
-      errors.cardNumber = 'Số thẻ không hợp lệ hoặc loại thẻ không được hỗ trợ';
-    } else if (cardData.cardNumber.replace(/\s/g, '').length < 13) {
-      errors.cardNumber = 'Số thẻ phải có ít nhất 13 chữ số';
+      errors.cardNumber = "Vui lòng nhập số thẻ";
+    } else if (
+      !detectedCardType &&
+      cardData.cardNumber.replace(/\s/g, "").length >= 16
+    ) {
+      errors.cardNumber = "Số thẻ không hợp lệ hoặc loại thẻ không được hỗ trợ";
+    } else if (cardData.cardNumber.replace(/\s/g, "").length < 13) {
+      errors.cardNumber = "Số thẻ phải có ít nhất 13 chữ số";
     }
-    
+
     // Validate card holder
     if (!cardData.cardHolder.trim()) {
-      errors.cardHolder = 'Vui lòng nhập tên chủ thẻ';
+      errors.cardHolder = "Vui lòng nhập tên chủ thẻ";
     } else if (cardData.cardHolder.trim().length < 2) {
-      errors.cardHolder = 'Tên chủ thẻ phải có ít nhất 2 ký tự';
+      errors.cardHolder = "Tên chủ thẻ phải có ít nhất 2 ký tự";
     }
-    
+
     // Validate expiry date
     if (!cardData.expiryDate) {
-      errors.expiryDate = 'Vui lòng nhập ngày hết hạn';
+      errors.expiryDate = "Vui lòng nhập ngày hết hạn";
     } else if (!/^\d{2}\/\d{2}$/.test(cardData.expiryDate)) {
-      errors.expiryDate = 'Ngày hết hạn phải có định dạng MM/YY';
+      errors.expiryDate = "Ngày hết hạn phải có định dạng MM/YY";
     } else {
-      const [month, year] = cardData.expiryDate.split('/');
+      const [month, year] = cardData.expiryDate.split("/");
       const currentDate = new Date();
       const expiryDate = new Date(2000 + parseInt(year), parseInt(month) - 1);
       if (expiryDate <= currentDate) {
-        errors.expiryDate = 'Thẻ đã hết hạn';
+        errors.expiryDate = "Thẻ đã hết hạn";
       }
     }
-    
+
     // Validate CVV
     if (!cardData.cvv) {
-      errors.cvv = 'Vui lòng nhập CVV';
+      errors.cvv = "Vui lòng nhập CVV";
     } else {
-      const expectedLength = detectedCardType === 'AMEX' ? 4 : 3;
+      const expectedLength = detectedCardType === "AMEX" ? 4 : 3;
       if (cardData.cvv.length !== expectedLength) {
         errors.cvv = `CVV phải có ${expectedLength} chữ số`;
       }
     }
-    
+
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
   const handleCardPayment = async (e) => {
     e.preventDefault();
-    
+
     if (!validateCardData()) {
-      show('Vui lòng kiểm tra lại thông tin thẻ', 'error');
+      show("Vui lòng kiểm tra lại thông tin thẻ", "error");
       return;
     }
-    
+
     setLoading(true);
 
     try {
@@ -145,8 +155,10 @@ function Payment() {
 
       if (response.status === 200 || response.status === 201) {
         show(
-          `✅ Thanh toán thành công! Số dư mới: $${response.data.payment?.amount || response.data.newBalance}`,
-          'success'
+          `✅ Thanh toán thành công! Số dư mới: $${
+            response.data.payment?.amount || response.data.newBalance
+          }`,
+          "success"
         );
         // Reset form
         setCardData({
@@ -162,12 +174,13 @@ function Payment() {
         // Reload trang để lấy số dư mới
         window.location.reload();
       } else {
-        show(`❌ Lỗi: ${response.data.message || 'Có lỗi xảy ra'}`, 'error');
+        show(`❌ Lỗi: ${response.data.message || "Có lỗi xảy ra"}`, "error");
       }
     } catch (error) {
       console.error("Payment error:", error);
-      const errorMsg = error.response?.data?.message || error.message || 'Có lỗi xảy ra';
-      show(`❌ Lỗi: ${errorMsg}`, 'error');
+      const errorMsg =
+        error.response?.data?.message || error.message || "Có lỗi xảy ra";
+      show(`❌ Lỗi: ${errorMsg}`, "error");
     } finally {
       setLoading(false);
     }
@@ -175,23 +188,24 @@ function Payment() {
 
   // Handler cho thay đổi số tiền với auto-format
   const handleAmountChange = (e) => {
-    let value = e.target.value.replace(/\./g, ''); // Remove existing dots
-    
-    if (/^\d*$/.test(value)) { // Only allow digits
+    let value = e.target.value.replace(/\./g, ""); // Remove existing dots
+
+    if (/^\d*$/.test(value)) {
+      // Only allow digits
       // Remove leading zeros, but keep at least one digit
-      value = value.replace(/^0+/, '') || '0';
-      
+      value = value.replace(/^0+/, "") || "0";
+
       // If it's just "0", don't format with dots
-      if (value === '0') {
-        setCardData({ ...cardData, amount: '0' });
+      if (value === "0") {
+        setCardData({ ...cardData, amount: "0" });
       } else {
-        const formatted = value.replace(/\B(?=(\d{3})+(?!\d))/g, '.'); // Add dots every 3 digits
+        const formatted = value.replace(/\B(?=(\d{3})+(?!\d))/g, "."); // Add dots every 3 digits
         setCardData({ ...cardData, amount: formatted });
       }
-      
+
       // Clear amount error when user types
       if (validationErrors.amount) {
-        setValidationErrors({ ...validationErrors, amount: '' });
+        setValidationErrors({ ...validationErrors, amount: "" });
       }
     }
   };
@@ -211,10 +225,10 @@ function Payment() {
       });
 
       setDetectedCardType(detected);
-      
+
       // Clear card number error when user types
       if (validationErrors.cardNumber) {
-        setValidationErrors({ ...validationErrors, cardNumber: '' });
+        setValidationErrors({ ...validationErrors, cardNumber: "" });
       }
     }
   };
@@ -223,32 +237,32 @@ function Payment() {
   const handleExpiryDateChange = (e) => {
     const input = e.target.value;
     const currentValue = cardData.expiryDate;
-    
+
     // Nếu đang xóa (input ngắn hơn current value)
     if (input.length < currentValue.length) {
       // Nếu xóa dấu /, thì xóa luôn số trước đó
-      if (currentValue.endsWith('/') && !input.endsWith('/')) {
+      if (currentValue.endsWith("/") && !input.endsWith("/")) {
         setCardData({ ...cardData, expiryDate: input.slice(0, -1) });
         return;
       }
       setCardData({ ...cardData, expiryDate: input });
       return;
     }
-    
+
     // Logic format khi thêm ký tự mới
-    let value = input.replace(/\D/g, ''); // Remove non-digits
-    
+    let value = input.replace(/\D/g, ""); // Remove non-digits
+
     if (value.length >= 2) {
-      value = value.substring(0, 2) + '/' + value.substring(2, 4);
+      value = value.substring(0, 2) + "/" + value.substring(2, 4);
     }
-    
+
     if (value.length <= 5) {
       setCardData({ ...cardData, expiryDate: value });
     }
-    
+
     // Clear expiry error when user types
     if (validationErrors.expiryDate) {
-      setValidationErrors({ ...validationErrors, expiryDate: '' });
+      setValidationErrors({ ...validationErrors, expiryDate: "" });
     }
   };
 
@@ -262,11 +276,12 @@ function Payment() {
       if (response.status === 200 || response.status === 201) {
         setQrData(response.data.payment);
       } else {
-        showToast(`Lỗi: ${response.data.message || 'Có lỗi xảy ra'}`, "error");
+        showToast(`Lỗi: ${response.data.message || "Có lỗi xảy ra"}`, "error");
       }
     } catch (error) {
       console.error("QR payment error:", error);
-      const errorMsg = error.response?.data?.message || error.message || 'Có lỗi xảy ra';
+      const errorMsg =
+        error.response?.data?.message || error.message || "Có lỗi xảy ra";
       showToast(`Lỗi: ${errorMsg}`, "error");
     } finally {
       setLoading(false);
@@ -282,18 +297,94 @@ function Payment() {
       });
 
       if (response.status === 200 || response.status === 201) {
-        showToast(`Xác nhận thành công! Số dư mới: $${response.data.newBalance}`, "success");
+        showToast(
+          `Xác nhận thành công! Số dư mới: $${response.data.newBalance}`,
+          "success"
+        );
         setQrData(null);
         setQrPayment({ amount: "", bankName: "VIETCOMBANK" });
         // Reload trang để lấy số dư mới
         window.location.reload();
       } else {
-        showToast(`Lỗi: ${response.data.message || 'Có lỗi xảy ra'}`, "error");
+        showToast(`Lỗi: ${response.data.message || "Có lỗi xảy ra"}`, "error");
       }
     } catch (error) {
       console.error("Confirm error:", error);
-      const errorMsg = error.response?.data?.message || error.message || 'Có lỗi xảy ra';
+      const errorMsg =
+        error.response?.data?.message || error.message || "Có lỗi xảy ra";
       showToast(`Lỗi: ${errorMsg}`, "error");
+    }
+  };
+
+  // Handler cho MoMo payment với auto-format
+  const handleMoMoAmountChange = (e) => {
+    let value = e.target.value.replace(/\./g, ""); // Remove existing dots
+
+    if (/^\d*$/.test(value)) {
+      // Only allow digits
+      value = value.replace(/^0+/, "") || "0";
+
+      if (value === "0") {
+        setMomoData({ ...momoData, amount: "0" });
+      } else {
+        const formatted = value.replace(/\B(?=(\d{3})+(?!\d))/g, "."); // Add dots every 3 digits
+        setMomoData({ ...momoData, amount: formatted });
+      }
+    }
+  };
+
+  // Handler tạo thanh toán MoMo
+  const handleMoMoPayment = async (e) => {
+    e.preventDefault();
+
+    // Validate amount
+    const amountValue = parseFloat(momoData.amount.replace(/\./g, ""));
+    if (!momoData.amount || amountValue <= 0) {
+      showToast("Vui lòng nhập số tiền hợp lệ", "error");
+      return;
+    }
+    if (amountValue < 10000) {
+      showToast("Số tiền tối thiểu là 10,000 VND", "error");
+      return;
+    }
+    if (amountValue > 50000000) {
+      showToast("Số tiền tối đa là 50,000,000 VND", "error");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const token = localStorage.getItem("token");
+      const response = await api.post(
+        "/payments/momo",
+        {
+          amount: amountValue,
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (response.data.success && response.data.payUrl) {
+        showToast("Đang chuyển đến trang thanh toán MoMo...", "success");
+
+        // Chờ 1 giây để user thấy toast
+        setTimeout(() => {
+          // Redirect đến trang thanh toán MoMo
+          window.location.href = response.data.payUrl;
+        }, 1000);
+      } else {
+        showToast(
+          response.data.message || "Không thể tạo thanh toán MoMo",
+          "error"
+        );
+      }
+    } catch (error) {
+      console.error("MoMo payment error:", error);
+      const errorMsg =
+        error.response?.data?.message || error.message || "Có lỗi xảy ra";
+      showToast(errorMsg, "error");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -308,7 +399,9 @@ function Payment() {
         <div className="card mb-8 bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950/50 dark:to-cyan-950/50 border-blue-200 dark:border-blue-800">
           <div className="flex justify-between items-center">
             <div>
-              <p className="text-sm text-blue-600 dark:text-blue-400 mb-1">Số dư hiện tại</p>
+              <p className="text-sm text-blue-600 dark:text-blue-400 mb-1">
+                Số dư hiện tại
+              </p>
               <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">
                 {`$${user?.balance?.toLocaleString() || 0}`}
               </p>
@@ -318,7 +411,7 @@ function Payment() {
         </div>
 
         {/* Payment Method Tabs */}
-        <div className="flex gap-4 mb-8">
+        <div className="flex gap-4 mb-8 flex-wrap">
           <button
             onClick={() => setPaymentMethod("CARD")}
             className={`px-6 py-3 rounded-xl font-semibold transition-all duration-200 ${
@@ -339,6 +432,21 @@ function Payment() {
           >
             📱 Thanh toán QR Code
           </button>
+          <button
+            onClick={() => setPaymentMethod("MOMO")}
+            className={`px-6 py-3 rounded-xl font-semibold transition-all duration-200 ${
+              paymentMethod === "MOMO"
+                ? "bg-gradient-to-r from-pink-600 to-purple-600 text-white shadow-lg transform -translate-y-0.5"
+                : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+            }`}
+          >
+            <img
+              src={momoLogo}
+              alt="MoMo eWallet"
+              className="inline-block w-6 h-6 mr-2"
+            />
+            MoMo eWallet
+          </button>
         </div>
 
         {/* Card Payment Form */}
@@ -350,60 +458,67 @@ function Payment() {
 
             <form onSubmit={handleCardPayment} className="space-y-6">
               <div>
-                <label className="form-label">
-                  Số tiền (USD)
-                </label>
+                <label className="form-label">Số tiền (USD)</label>
                 <input
                   type="text"
                   value={cardData.amount}
                   onChange={handleAmountChange}
-                  className={`form-input ${validationErrors.amount ? 'border-red-500' : ''}`}
+                  className={`form-input ${
+                    validationErrors.amount ? "border-red-500" : ""
+                  }`}
                   placeholder="10.000"
                   required
                 />
                 {validationErrors.amount && (
-                  <p className="text-red-500 text-sm mt-1">{validationErrors.amount}</p>
+                  <p className="text-red-500 text-sm mt-1">
+                    {validationErrors.amount}
+                  </p>
                 )}
               </div>
 
               <div>
-                <label className="form-label">
-                  Số thẻ
-                </label>
+                <label className="form-label">Số thẻ</label>
                 <div className="flex items-center gap-3">
                   <input
                     type="text"
                     value={cardData.cardNumber}
                     onChange={handleCardNumberChange}
-                    className={`form-input flex-1 ${validationErrors.cardNumber ? 'border-red-500' : ''}`}
+                    className={`form-input flex-1 ${
+                      validationErrors.cardNumber ? "border-red-500" : ""
+                    }`}
                     // placeholder="4532 1234 5678 9012"
                     maxLength="19"
                     required
                   />
                   {detectedCardType && (
                     <div className="flex-shrink-0">
-                      <img 
-                        src={CARD_LOGOS[detectedCardType]} 
-                        alt={CARD_TYPES.find((c) => c.code === detectedCardType)?.name}
+                      <img
+                        src={CARD_LOGOS[detectedCardType]}
+                        alt={
+                          CARD_TYPES.find((c) => c.code === detectedCardType)
+                            ?.name
+                        }
                         className="w-12 h-8 object-contain bg-white rounded border border-gray-200 dark:border-gray-600 p-1"
                       />
                     </div>
                   )}
                 </div>
                 {validationErrors.cardNumber && (
-                  <p className="text-red-500 text-sm mt-1">{validationErrors.cardNumber}</p>
-                )}
-                {!detectedCardType && cardData.cardNumber.replace(/\s/g, '').length >= 16 && !validationErrors.cardNumber && (
-                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">
-                    ❌ Số thẻ không hợp lệ hoặc loại thẻ không được hỗ trợ
+                  <p className="text-red-500 text-sm mt-1">
+                    {validationErrors.cardNumber}
                   </p>
                 )}
+                {!detectedCardType &&
+                  cardData.cardNumber.replace(/\s/g, "").length >= 16 &&
+                  !validationErrors.cardNumber && (
+                    <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                      ❌ Số thẻ không hợp lệ hoặc loại thẻ không được hỗ trợ
+                    </p>
+                  )}
               </div>
 
               <div>
-                <label className="form-label">
-                  Tên chủ thẻ
-                </label>
+                <label className="form-label">Tên chủ thẻ</label>
                 <input
                   type="text"
                   value={cardData.cardHolder}
@@ -414,34 +529,43 @@ function Payment() {
                     });
                     // Clear cardholder error when user types
                     if (validationErrors.cardHolder) {
-                      setValidationErrors({ ...validationErrors, cardHolder: '' });
+                      setValidationErrors({
+                        ...validationErrors,
+                        cardHolder: "",
+                      });
                     }
                   }}
-                  className={`form-input ${validationErrors.cardHolder ? 'border-red-500' : ''}`}
+                  className={`form-input ${
+                    validationErrors.cardHolder ? "border-red-500" : ""
+                  }`}
                   placeholder="NGUYEN VAN A"
                   required
                 />
                 {validationErrors.cardHolder && (
-                  <p className="text-red-500 text-sm mt-1">{validationErrors.cardHolder}</p>
+                  <p className="text-red-500 text-sm mt-1">
+                    {validationErrors.cardHolder}
+                  </p>
                 )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="form-label">
-                    Ngày hết hạn (MM/YY)
-                  </label>
+                  <label className="form-label">Ngày hết hạn (MM/YY)</label>
                   <input
                     type="text"
                     value={cardData.expiryDate}
                     onChange={handleExpiryDateChange}
-                    className={`form-input ${validationErrors.expiryDate ? 'border-red-500' : ''}`}
+                    className={`form-input ${
+                      validationErrors.expiryDate ? "border-red-500" : ""
+                    }`}
                     placeholder="MM/YY"
                     maxLength="5"
                     required
                   />
                   {validationErrors.expiryDate && (
-                    <p className="text-red-500 text-sm mt-1">{validationErrors.expiryDate}</p>
+                    <p className="text-red-500 text-sm mt-1">
+                      {validationErrors.expiryDate}
+                    </p>
                   )}
                 </div>
                 <div>
@@ -453,16 +577,20 @@ function Payment() {
                       setCardData({ ...cardData, cvv: e.target.value });
                       // Clear CVV error when user types
                       if (validationErrors.cvv) {
-                        setValidationErrors({ ...validationErrors, cvv: '' });
+                        setValidationErrors({ ...validationErrors, cvv: "" });
                       }
                     }}
-                    className={`form-input ${validationErrors.cvv ? 'border-red-500' : ''}`}
+                    className={`form-input ${
+                      validationErrors.cvv ? "border-red-500" : ""
+                    }`}
                     placeholder="123"
                     maxLength="4"
                     required
                   />
                   {validationErrors.cvv && (
-                    <p className="text-red-500 text-sm mt-1">{validationErrors.cvv}</p>
+                    <p className="text-red-500 text-sm mt-1">
+                      {validationErrors.cvv}
+                    </p>
                   )}
                 </div>
               </div>
@@ -474,9 +602,9 @@ function Payment() {
               >
                 {loading ? "Đang xử lý..." : "💳 Thanh toán"}
               </button>
-          </form>
-        </div>
-      )}
+            </form>
+          </div>
+        )}
 
         {/* QR Payment Form */}
         {paymentMethod === "QR" && !qrData && (
@@ -487,9 +615,7 @@ function Payment() {
 
             <form onSubmit={handleQRPayment} className="space-y-6">
               <div>
-                <label className="form-label">
-                  Số tiền (VND)
-                </label>
+                <label className="form-label">Số tiền (VND)</label>
                 <input
                   type="number"
                   value={qrPayment.amount}
@@ -504,9 +630,7 @@ function Payment() {
               </div>
 
               <div>
-                <label className="form-label">
-                  Chọn ngân hàng
-                </label>
+                <label className="form-label">Chọn ngân hàng</label>
                 <select
                   value={qrPayment.bankName}
                   onChange={(e) =>
@@ -529,9 +653,116 @@ function Payment() {
               >
                 {loading ? "Đang tạo QR..." : "📱 Tạo mã QR"}
               </button>
-          </form>
-        </div>
-      )}
+            </form>
+          </div>
+        )}
+
+        {/* MoMo Payment Form */}
+        {paymentMethod === "MOMO" && (
+          <div className="card bg-gradient-to-br from-pink-50 to-purple-50 dark:from-pink-950/30 dark:to-purple-950/30 border-2 border-pink-200 dark:border-pink-800">
+            <div className="flex items-center gap-3 mb-6">
+              <img
+                src={momoLogo}
+                alt="MoMo Logo"
+                className="w-12 h-12 object-contain"
+              />
+              <div>
+                <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                  MoMo eWallet
+                </h2>
+                <p className="text-sm text-slate-600 dark:text-slate-400">
+                  Thanh toán nhanh chóng, an toàn với ví điện tử MoMo
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleMoMoPayment} className="space-y-6">
+              <div>
+                <label className="form-label">Số tiền (VND)</label>
+                <input
+                  type="text"
+                  value={momoData.amount}
+                  onChange={handleMoMoAmountChange}
+                  className="form-input text-lg"
+                  placeholder="10.000 - 50.000.000"
+                  required
+                />
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                  💡 Tối thiểu: 10,000 VND | Tối đa: 50,000,000 VND
+                </p>
+              </div>
+
+              {/* MoMo Features */}
+              <div className="bg-white dark:bg-slate-800 rounded-lg p-4 space-y-3">
+                <h3 className="font-semibold text-slate-900 dark:text-slate-100 mb-3">
+                  ✨ Ưu điểm thanh toán MoMo:
+                </h3>
+                <div className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
+                  <span>⚡</span>
+                  <span>
+                    Thanh toán tức thì, tiền vào tài khoản ngay lập tức
+                  </span>
+                </div>
+                <div className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
+                  <span>🔒</span>
+                  <span>Bảo mật tuyệt đối với công nghệ mã hóa</span>
+                </div>
+                <div className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
+                  <span>📱</span>
+                  <span>Hỗ trợ quét QR hoặc thanh toán trên app/web</span>
+                </div>
+                <div className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
+                  <span>💰</span>
+                  <span>Không phí giao dịch</span>
+                </div>
+              </div>
+
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={loading || !momoData.amount}
+                className="w-full bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-700 hover:to-purple-700 disabled:from-slate-400 disabled:to-slate-500 disabled:cursor-not-allowed text-white py-4 rounded-xl font-semibold transition-all duration-200 transform hover:-translate-y-0.5 active:translate-y-0 shadow-lg"
+              >
+                {loading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg
+                      className="animate-spin h-5 w-5"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      ></circle>
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      ></path>
+                    </svg>
+                    Đang xử lý...
+                  </span>
+                ) : (
+                  "🟣 Thanh toán với MoMo"
+                )}
+              </button>
+
+              {/* Info */}
+              <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                <p className="text-sm text-blue-900 dark:text-blue-100">
+                  <strong>ℹ️ Lưu ý:</strong> Sau khi nhấn nút thanh toán, bạn sẽ
+                  được chuyển đến trang thanh toán MoMo. Vui lòng hoàn tất thanh
+                  toán trong vòng 15 phút.
+                </p>
+              </div>
+            </form>
+          </div>
+        )}
 
         {/* QR Code Display */}
         {qrData && (
@@ -555,32 +786,53 @@ function Payment() {
                 </h3>
                 <div className="space-y-3 text-sm text-slate-700 dark:text-slate-300">
                   <div className="flex justify-between">
-                    <span className="text-slate-600 dark:text-slate-400">Ngân hàng:</span>
-                    <span className="font-medium text-slate-900 dark:text-slate-100">{qrData.bankName}</span>
+                    <span className="text-slate-600 dark:text-slate-400">
+                      Ngân hàng:
+                    </span>
+                    <span className="font-medium text-slate-900 dark:text-slate-100">
+                      {qrData.bankName}
+                    </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-600 dark:text-slate-400">Số tài khoản:</span>
-                    <span className="font-mono text-slate-900 dark:text-slate-100">{qrData.accountNumber}</span>
+                    <span className="text-slate-600 dark:text-slate-400">
+                      Số tài khoản:
+                    </span>
+                    <span className="font-mono text-slate-900 dark:text-slate-100">
+                      {qrData.accountNumber}
+                    </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-600 dark:text-slate-400">Tên người nhận:</span>
-                    <span className="font-medium text-slate-900 dark:text-slate-100">{qrData.accountName}</span>
+                    <span className="text-slate-600 dark:text-slate-400">
+                      Tên người nhận:
+                    </span>
+                    <span className="font-medium text-slate-900 dark:text-slate-100">
+                      {qrData.accountName}
+                    </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-600 dark:text-slate-400">Số tiền:</span>
+                    <span className="text-slate-600 dark:text-slate-400">
+                      Số tiền:
+                    </span>
                     <span className="font-bold text-lg text-green-600 dark:text-green-400">
                       {qrData.amount.toLocaleString()} VND
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-600 dark:text-slate-400">Nội dung:</span>
-                    <span className="font-medium text-slate-900 dark:text-slate-100">{qrData.transferContent}</span>
+                    <span className="text-slate-600 dark:text-slate-400">
+                      Nội dung:
+                    </span>
+                    <span className="font-medium text-slate-900 dark:text-slate-100">
+                      {qrData.transferContent}
+                    </span>
                   </div>
                 </div>
                 <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-600">
                   <p className="text-red-600 dark:text-red-400 text-sm flex items-center justify-center gap-2">
                     <span>⏰</span>
-                    <span>Hết hạn: {new Date(qrData.expiresAt).toLocaleString("vi-VN")}</span>
+                    <span>
+                      Hết hạn:{" "}
+                      {new Date(qrData.expiresAt).toLocaleString("vi-VN")}
+                    </span>
                   </p>
                 </div>
               </div>
@@ -601,13 +853,13 @@ function Payment() {
                 </button>
               </div>
 
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-4">
-              💡 Trong môi trường test, bạn có thể click "Xác nhận" ngay mà
-              không cần chuyển khoản thật
-            </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-4">
+                💡 Trong môi trường test, bạn có thể click "Xác nhận" ngay mà
+                không cần chuyển khoản thật
+              </p>
+            </div>
           </div>
-        </div>
-      )}
+        )}
       </div>
     </div>
   );
