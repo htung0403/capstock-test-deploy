@@ -1,6 +1,10 @@
 /*
   File: server.js
   Purpose: Initialize Express app, connect to MongoDB, register middlewares and API routes, and start the HTTP server.
+  
+  CHANGES (2025-10-20):
+  - Integrated `aiRoutes` for AI analysis functionalities (sentiment, price, comprehensive analysis).
+  - Integrated `chatbotRoutes` for AI chatbot functionality (separate chat page and widget).
 */
 const express = require('express');
 const mongoose = require('mongoose');
@@ -15,6 +19,8 @@ const orderRoutes = require('./routes/orderRoutes');
 const transactionRoutes = require('./routes/transactionRoutes');
 const newsRoutes = require('./routes/newsRoutes');
 const portfolioRoutes = require('./routes/portfolioRoutes');
+const aiRoutes = require('./routes/aiRoutes'); // Import the new AI routes
+const chatbotRoutes = require('./routes/chatbotRoutes'); // Import the new chatbot routes
 const paymentRoutes = require('./routes/paymentRoutes');
 
 const app = express();
@@ -33,6 +39,8 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/news', newsRoutes);
 app.use('/api/portfolio', portfolioRoutes);
+app.use('/api/ai', aiRoutes); // Use the new AI routes
+app.use('/api/chatbot', chatbotRoutes); // Use the new chatbot routes
 app.use('/api/payments', paymentRoutes);
 
 // Health check
