@@ -6,20 +6,29 @@ const Order = require('../models/Order');
 const Portfolio = require('../models/Portfolio');
 const Stock = require('../models/Stock');
 const User = require('../models/User');
+const matchingEngine = require('../services/matchingEngine');
 
-// Đặt lệnh mua/bán cổ phiếu
+// Đặt lệnh mua/bán cổ phiếu với các loại lệnh: Market, Limit, Stop, Stop-Limit
 exports.placeOrder = async (req, res) => {
   try {
-    const { stockSymbol, type, quantity, price } = req.body;
+    const { 
+      stockSymbol, 
+      type, 
+      orderType = 'MARKET',  // Default to MARKET order
+      quantity, 
+      limitPrice, 
+      stopPrice,
+      expiresAt 
+    } = req.body;
 
     console.log('=== PLACE ORDER REQUEST ===');
     console.log('User ID:', req.user?.id);
     console.log('Request Body:', req.body);
 
     // Validate input
-    if (!stockSymbol || !type || !quantity || !price) {
+    if (!stockSymbol || !type || !quantity) {
       return res.status(400).json({ 
-        message: 'Vui lòng cung cấp đầy đủ thông tin: stockSymbol, type, quantity, price' 
+        message: 'Vui lòng cung cấp đầy đủ thông tin: stockSymbol, type, quantity' 
       });
     }
 
@@ -27,8 +36,23 @@ exports.placeOrder = async (req, res) => {
       return res.status(400).json({ message: 'Số lượng phải lớn hơn 0' });
     }
 
-    if (price <= 0) {
-      return res.status(400).json({ message: 'Giá phải lớn hơn 0' });
+    // Validate order type specific requirements
+    if (orderType === 'LIMIT') {
+      if (!limitPrice || limitPrice <= 0) {
+        return res.status(400).json({ message: 'Lệnh Limit phải có giá giới hạn hợp lệ' });
+      }
+    }
+
+    if (orderType === 'STOP') {
+      if (!stopPrice || stopPrice <= 0) {
+        return res.status(400).json({ message: 'Lệnh Stop phải có giá kích hoạt hợp lệ' });
+      }
+    }
+
+    if (orderType === 'STOP_LIMIT') {
+      if (!stopPrice || stopPrice <= 0 || !limitPrice || limitPrice <= 0) {
+        return res.status(400).json({ message: 'Lệnh Stop-Limit phải có cả giá kích hoạt và giá giới hạn hợp lệ' });
+      }
     }
 
     // Kiểm tra cổ phiếu có tồn tại không
@@ -47,48 +71,18 @@ exports.placeOrder = async (req, res) => {
       return res.status(404).json({ message: 'Không tìm thấy người dùng' });
     }
 
-    const totalValue = quantity * price;
-
-    console.log('User Balance:', user.balance);
-    console.log('Total Value Required:', totalValue);
-
-    // Kiểm tra điều kiện đặt lệnh
-    if (type === 'BUY') {
-      // Kiểm tra số dư
-      if (user.balance < totalValue) {
-        console.log('❌ Insufficient balance!');
-        return res.status(400).json({ 
-          message: 'Số dư không đủ để thực hiện giao dịch',
-          required: totalValue,
-          available: user.balance
-        });
-      }
-    } else if (type === 'SELL') {
-      // Kiểm tra số lượng cổ phiếu trong portfolio
-      const portfolio = await Portfolio.findOne({ 
-        user: req.user.id, 
-        stock: stock._id 
-      });
-      
-      if (!portfolio || portfolio.quantity < quantity) {
-        return res.status(400).json({ 
-          message: 'Không đủ số lượng cổ phiếu để bán',
-          required: quantity,
-          available: portfolio ? portfolio.quantity : 0
-        });
-      }
-    } else {
-      return res.status(400).json({ message: 'Loại lệnh không hợp lệ (BUY hoặc SELL)' });
-    }
-
-    // Tạo lệnh
+    // Tạo lệnh mới
     console.log('Creating order with data:', {
       user: req.user.id,
       stock: stock._id,
       stockSymbol: stock.symbol,
       type,
+      orderType,
       quantity,
-      price,
+      marketPrice: stock.currentPrice,
+      limitPrice,
+      stopPrice,
+      expiresAt,
       status: 'PENDING'
     });
     
@@ -97,15 +91,19 @@ exports.placeOrder = async (req, res) => {
       stock: stock._id,
       stockSymbol: stock.symbol,
       type,
+      orderType,
       quantity,
-      price,
+      marketPrice: stock.currentPrice, // Save market price at order creation
+      limitPrice,
+      stopPrice,
+      expiresAt,
       status: 'PENDING'
     });
     
     console.log('✅ Order created successfully:', order._id);
 
-    // Tự động khớp lệnh ngay lập tức (matching engine đơn giản)
-    await executeOrder(order._id);
+    // Process order through matching engine
+    const result = await matchingEngine.processOrder(order);
 
     // Lấy lệnh đã cập nhật
     const executedOrder = await Order.findById(order._id).populate('stock');
@@ -114,99 +112,31 @@ exports.placeOrder = async (req, res) => {
     const updatedUser = await User.findById(req.user.id).select('-password');
 
     res.status(201).json({
-      message: 'Đặt lệnh thành công',
+      message: result.message || 'Đặt lệnh thành công',
       order: executedOrder,
-      user: updatedUser
+      user: updatedUser,
+      executionDetails: result.executionPrice ? {
+        executionPrice: result.executionPrice,
+        totalAmount: result.totalAmount
+      } : null
     });
   } catch (err) {
     console.error('Error placing order:', err);
     res.status(400).json({ message: err.message });
   }
-};
-
-// Hàm thực thi lệnh (matching engine đơn giản)
-async function executeOrder(orderId) {
-  const order = await Order.findById(orderId).populate('stock');
-  if (!order || order.status !== 'PENDING') {
-    return;
-  }
-
-  try {
-    const user = await User.findById(order.user);
-    const totalValue = order.quantity * order.price;
-
-    if (order.type === 'BUY') {
-      // Trừ tiền từ tài khoản
-      user.balance -= totalValue;
-      await user.save();
-
-      // Cập nhật hoặc tạo mới portfolio
-      let portfolio = await Portfolio.findOne({ 
-        user: order.user, 
-        stock: order.stock 
-      });
-
-      if (portfolio) {
-        // Tính lại giá mua trung bình
-        const totalCost = (portfolio.quantity * portfolio.avgBuyPrice) + totalValue;
-        const totalQuantity = portfolio.quantity + order.quantity;
-        portfolio.avgBuyPrice = totalCost / totalQuantity;
-        portfolio.quantity = totalQuantity;
-      } else {
-        // Tạo mới portfolio
-        portfolio = new Portfolio({
-          user: order.user,
-          stock: order.stock,
-          quantity: order.quantity,
-          avgBuyPrice: order.price
-        });
-      }
-      await portfolio.save();
-
-    } else if (order.type === 'SELL') {
-      // Cộng tiền vào tài khoản
-      user.balance += totalValue;
-      await user.save();
-
-      // Cập nhật portfolio
-      const portfolio = await Portfolio.findOne({ 
-        user: order.user, 
-        stock: order.stock 
-      });
-
-      if (portfolio) {
-        portfolio.quantity -= order.quantity;
-        
-        // Nếu bán hết, xóa khỏi portfolio
-        if (portfolio.quantity === 0) {
-          await Portfolio.deleteOne({ _id: portfolio._id });
-        } else {
-          await portfolio.save();
-        }
-      }
-    }
-
-    // Cập nhật trạng thái lệnh
-    order.status = 'FILLED';
-    await order.save();
-
-  } catch (error) {
-    console.error('Error executing order:', error);
-    // Nếu có lỗi, đánh dấu lệnh là CANCELLED
-    order.status = 'CANCELLED';
-    await order.save();
-    throw error;
-  }
 }
+
 
 // Lấy danh sách lệnh của user
 exports.getOrders = async (req, res) => {
   try {
-    const { status, type } = req.query;
+    const { status, type, orderType, stockSymbol } = req.query;
     
     const filter = { user: req.user.id };
     if (status) filter.status = status;
     if (type) filter.type = type;
+    if (orderType) filter.orderType = orderType;
+    if (stockSymbol) filter.stockSymbol = stockSymbol.toUpperCase();
 
     const orders = await Order.find(filter)
       .populate('stock')
@@ -257,14 +187,15 @@ exports.cancelOrder = async (req, res) => {
       return res.status(403).json({ message: 'Không có quyền hủy lệnh này' });
     }
 
-    // Chỉ có thể hủy lệnh đang PENDING
-    if (order.status !== 'PENDING') {
+    // Chỉ có thể hủy lệnh nếu canBeCancelled() trả về true
+    if (!order.canBeCancelled()) {
       return res.status(400).json({ 
         message: `Không thể hủy lệnh đã ${order.status}` 
       });
     }
 
     order.status = 'CANCELLED';
+    order.reason = 'Người dùng hủy lệnh';
     await order.save();
 
     res.json({
@@ -276,3 +207,32 @@ exports.cancelOrder = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
+// Lấy lệnh đang hoạt động (PENDING, TRIGGERED)
+exports.getActiveOrders = async (req, res) => {
+  try {
+    const { stockSymbol } = req.query;
+    
+    const filter = { 
+      user: req.user.id,
+      status: { $in: ['PENDING', 'TRIGGERED'] }
+    };
+    
+    if (stockSymbol) {
+      filter.stockSymbol = stockSymbol.toUpperCase();
+    }
+
+    const orders = await Order.find(filter)
+      .populate('stock')
+      .sort({ createdAt: -1 });
+
+    res.json({
+      count: orders.length,
+      orders
+    });
+  } catch (err) {
+    console.error('Error getting active orders:', err);
+    res.status(500).json({ message: err.message });
+  }
+};
+

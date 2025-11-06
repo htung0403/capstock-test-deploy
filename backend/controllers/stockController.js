@@ -4,7 +4,7 @@
 */
 const Stock = require('../models/Stock');
 const StockHistory = require('../models/StockHistory');
-const { fetchQuote } = require('../services/marketDataService');
+const { fetchQuote, fetchDailySeries } = require('../services/marketDataService');
 
 exports.getStocks = async (req, res) => {
   const stocks = await Stock.find();
@@ -73,6 +73,10 @@ exports.refreshStockBySymbol = async (req, res) => {
       await StockHistory.create({
         stockSymbol: symbol,
         price: update.currentPrice,
+        open: update.open,
+        high: update.high,
+        low: update.low,
+        close: update.close,
         volume: update.volume ?? 0,
         timestamp: new Date(),
       });
@@ -105,6 +109,10 @@ exports.refreshAllStocks = async (req, res) => {
           await StockHistory.create({
             stockSymbol: s.symbol,
             price: update.currentPrice,
+            open: update.open,
+            high: update.high,
+            low: update.low,
+            close: update.close,
             volume: update.volume ?? 0,
             timestamp: new Date(),
           });
@@ -116,6 +124,78 @@ exports.refreshAllStocks = async (req, res) => {
     }
     res.json({ message: 'Refresh completed', count: stocks.length, results });
   } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
+
+// Backfill OHLC data for a specific symbol from Alpha Vantage daily series
+exports.backfillOHLC = async (req, res) => {
+  try {
+    const { symbol } = req.params;
+    const stock = await Stock.findOne({ symbol: symbol.toUpperCase() });
+    
+    if (!stock) {
+      return res.status(404).json({ message: `Stock ${symbol} not found` });
+    }
+
+    console.log(`Fetching daily series for ${symbol}...`);
+    const dailySeries = await fetchDailySeries(symbol);
+    console.log(`Retrieved ${dailySeries.length} data points`);
+
+    let updated = 0;
+    let created = 0;
+
+    for (const day of dailySeries) {
+      const timestamp = new Date(day.date);
+      
+      // Check if record exists for this date
+      const startOfDay = new Date(timestamp);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(timestamp);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      const existing = await StockHistory.findOne({
+        stockSymbol: stock.symbol,
+        timestamp: { $gte: startOfDay, $lt: endOfDay }
+      });
+
+      if (existing) {
+        // Update if OHLC data is missing
+        if (!existing.open || !existing.high || !existing.low || !existing.close) {
+          existing.price = day.close || existing.price;
+          existing.open = day.open;
+          existing.high = day.high;
+          existing.low = day.low;
+          existing.close = day.close;
+          existing.volume = day.volume || existing.volume;
+          await existing.save();
+          updated++;
+        }
+      } else {
+        // Create new record
+        await StockHistory.create({
+          stockSymbol: stock.symbol,
+          price: day.close,
+          open: day.open,
+          high: day.high,
+          low: day.low,
+          close: day.close,
+          volume: day.volume,
+          timestamp: new Date(day.date)
+        });
+        created++;
+      }
+    }
+
+    res.json({ 
+      message: 'OHLC backfill completed', 
+      symbol,
+      updated,
+      created,
+      total: dailySeries.length
+    });
+  } catch (err) {
+    console.error('Backfill error:', err);
     res.status(400).json({ message: err.message });
   }
 };

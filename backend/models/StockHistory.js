@@ -8,6 +8,10 @@ const StockHistorySchema = new mongoose.Schema(
   {
     stockSymbol: { type: String, required: true },
     price: { type: Number, required: true },
+    open: { type: Number },
+    high: { type: Number },
+    low: { type: Number },
+    close: { type: Number },
     volume: { type: Number, required: true },
     timestamp: { type: Date, default: Date.now },
   },
