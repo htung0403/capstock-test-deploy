@@ -13,7 +13,7 @@ const {
   getHistoryBySymbol,
   backfillOHLC 
 } = require('../controllers/stockController');
-const { protect, admin } = require('../middlewares/authMiddleware');
+const { protect, authorize } = require('../middlewares/authMiddleware');
 
 const router = express.Router();
 
@@ -21,12 +21,12 @@ router.get('/', getStocks);
 router.get('/:id', getStock);
 // Public history endpoint by symbol
 router.get('/symbol/:symbol/history', getHistoryBySymbol);
-router.post('/', protect, admin, createStock);   // chỉ admin thêm
-router.put('/:id', protect, admin, updateStock);
+router.post('/', protect, authorize(['ADMIN']), createStock);   // chỉ admin thêm
+router.put('/:id', protect, authorize(['ADMIN']), updateStock);
 // Admin-only refresh endpoints
-router.post('/refresh/:symbol', protect, admin, refreshStockBySymbol);
-router.post('/refresh', protect, admin, refreshAllStocks);
+router.post('/refresh/:symbol', protect, authorize(['ADMIN']), refreshStockBySymbol);
+router.post('/refresh', protect, authorize(['ADMIN']), refreshAllStocks);
 // Admin-only backfill OHLC data
-router.post('/backfill/:symbol', protect, admin, backfillOHLC);
+router.post('/backfill/:symbol', protect, authorize(['ADMIN']), backfillOHLC);
 
 module.exports = router;
