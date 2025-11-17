@@ -25,7 +25,14 @@ import StockDetail from "./pages/StockDetail";
 import Payment from "./pages/Payment";
 import Profile from "./pages/Profile";
 import Orders from "./pages/Orders";
-import AIChatPage from "./pages/AIChatPage"; // Import the new AI Chat Page
+import AIChatPage from "./pages/AIChatPage"; 
+import NewArticlePage from "./pages/NewArticlePage"; // Import new article page
+import EditArticlePage from "./pages/EditArticlePage"; // Import edit article page
+import WriterDashboard from "./pages/WriterDashboard"; // Import writer dashboard page
+import EditorDashboard from "./pages/EditorDashboard"; // Import editor dashboard page
+import ReviewArticlePage from "./pages/ReviewArticlePage"; // Import review article page
+import NewsPage from "./pages/NewsPage"; // Import NewsPage
+import ArticleDetailPage from "./pages/ArticleDetailPage"; // Import ArticleDetailPage
 
 function App() {
   return (
@@ -38,6 +45,7 @@ function App() {
               <Routes>
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
+                {/* Protected Routes */}
                 <Route  
                   path="/dashboard"
                   element={
@@ -62,6 +70,69 @@ function App() {
                     </ProtectedRoute>
                   }
                 />
+                {/* Writer Routes */}
+                <Route
+                  path="/writer/new-article"
+                  element={
+                    <ProtectedRoute>
+                      <NewArticlePage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/writer/edit-article/:id"
+                  element={
+                    <ProtectedRoute>
+                      <EditArticlePage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/writer/dashboard"
+                  element={
+                    <ProtectedRoute>
+                      <WriterDashboard />
+                    </ProtectedRoute>
+                  }
+                />
+                {/* Editor Routes */}
+                <Route
+                  path="/editor/dashboard"
+                  element={
+                    <ProtectedRoute>
+                      <EditorDashboard />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/editor/review-article/:id"
+                  element={
+                    <ProtectedRoute>
+                      <ReviewArticlePage />
+                    </ProtectedRoute>
+                  }
+                />
+
+                {/* News Page Route */}
+                <Route
+                  path="/news"
+                  element={
+                    <ProtectedRoute>
+                      <NewsPage />
+                    </ProtectedRoute>
+                  }
+                />
+
+                {/* Article Detail Page Route */}
+                <Route
+                  path="/news/:id"
+                  element={
+                    <ProtectedRoute>
+                      <ArticleDetailPage />
+                    </ProtectedRoute>
+                  }
+                />
+
                 <Route
                   path="/"
                   element={<Navigate to="/dashboard" replace />}
