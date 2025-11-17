@@ -37,9 +37,12 @@ export const AuthProvider = ({ children }) => {
       const response = await api.post('/users/login', { email, password });
       const { token, user: userData } = response.data;
       
+      // Ensure userData has an 'id' property, mapping from '_id' if necessary
+      const processedUserData = { ...userData, id: userData._id || userData.id };
+
       localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(userData));
-      setUser(userData);
+      localStorage.setItem('user', JSON.stringify(processedUserData));
+      setUser(processedUserData);
       show('Đăng nhập thành công', 'success');
       
       return { success: true };
@@ -55,9 +58,12 @@ export const AuthProvider = ({ children }) => {
       const response = await api.post('/users/register', { username, email, password });
       const { token, user: userData } = response.data;
       
+      // Ensure userData has an 'id' property, mapping from '_id' if necessary
+      const processedUserData = { ...userData, id: userData._id || userData.id };
+
       localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(userData));
-      setUser(userData);
+      localStorage.setItem('user', JSON.stringify(processedUserData));
+      setUser(processedUserData);
       show('Tạo tài khoản thành công', 'success');
       
       return { success: true };
@@ -93,10 +99,13 @@ export const AuthProvider = ({ children }) => {
       console.log("✅ API Response:", userData);
       console.log("💰 User balance:", userData.balance);
 
-      localStorage.setItem('user', JSON.stringify(userData));
-      setUser(userData);
+      // Ensure userData has an 'id' property, mapping from '_id' if necessary
+      const processedUserData = { ...userData, id: userData._id || userData.id };
 
-      return userData;
+      localStorage.setItem('user', JSON.stringify(processedUserData));
+      setUser(processedUserData);
+
+      return processedUserData;
     } catch (error) {
       console.error('❌ Error refreshing user data:', error);
       console.error('❌ Error response:', error.response?.data);
