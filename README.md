@@ -28,31 +28,108 @@ Dự án được chia thành hai phần chính: `backend` và `frontend`.
 ```
 Stock-Cap/
 ├── backend/
-│   ├── ai_scripts/           # Chứa các script Python cho phân tích AI (cảm xúc, giá)
-│   ├── controllers/          # Xử lý logic nghiệp vụ cho các API endpoint
-│   ├── middlewares/          # Chứa các middleware (ví dụ: xác thực)
-│   ├── models/               # Định nghĩa schema cho cơ sở dữ liệu MongoDB (Mongoose)
-│   ├── node_modules/         # Các thư viện Node.js được cài đặt
-│   ├── routes/               # Định nghĩa các tuyến đường API
-│   ├── scheduler/            # Lên lịch các tác vụ định kỳ (ví dụ: làm mới dữ liệu)
-│   ├── services/             # Chứa các service tương tác với bên ngoài (dữ liệu thị trường, AI)
-│   ├── server.js             # Điểm khởi chạy của ứng dụng backend (Express)
-│   ├── package.json          # Danh sách dependency và script của backend
-│   └── .env                  # Cấu hình biến môi trường
+│   ├── .env                       # Cấu hình biến môi trường
+│   ├── .gitignore                 # Các tệp và thư mục bị bỏ qua bởi Git
+│   ├── ai_scripts/                # Chứa các script Python cho phân tích AI (cảm xúc, giá)
+│   │   ├── price_analyzer.py
+│   │   └── sentiment_analyzer.py
+│   ├── controllers/               # Xử lý logic nghiệp vụ cho các API endpoint
+│   │   ├── aiController.js
+│   │   ├── chatbotController.js
+│   │   ├── marketSummaryController.js
+│   │   ├── newsController.js
+│   │   ├── orderController.js
+│   │   ├── portfolioController.js
+│   │   ├── stockController.js
+│   │   ├── transactionController.js
+│   │   └── userController.js
+│   ├── middlewares/               # Chứa các middleware (ví dụ: xác thực, phân quyền)
+│   │   └── authMiddleware.js
+│   ├── models/                    # Định nghĩa schema cho cơ sở dữ liệu MongoDB (Mongoose)
+│   │   ├── Article.js
+│   │   ├── Category.js
+│   │   ├── ChatSession.js
+│   │   ├── Order.js
+│   │   ├── Payment.js
+│   │   ├── Portfolio.js
+│   │   ├── Report.js
+│   │   ├── Stock.js
+│   │   ├── StockHistory.js
+│   │   ├── Tag.js
+│   │   ├── Transaction.js
+│   │   └── User.js
+│   ├── node_modules/              # Các thư viện Node.js được cài đặt
+│   ├── package.json               # Danh sách dependency và script của backend
+│   ├── package-lock.json          # Ghi lại phiên bản chính xác của các dependency
+│   ├── routes/                    # Định nghĩa các tuyến đường API
+│   │   ├── aiRoutes.js
+│   │   ├── authRoutes.js
+│   │   ├── chatbotRoutes.js
+│   │   ├── marketRoutes.js
+│   │   ├── newsRoutes.js
+│   │   ├── orderRoutes.js
+│   │   ├── portfolioRoutes.js
+│   │   ├── stockRoutes.js
+│   │   ├── transactionRoutes.js
+│   │   ├── userRoutes.js
+│   │   └── writerRoutes.js
+│   ├── scheduler/                 # Lên lịch các tác vụ định kỳ (ví dụ: làm mới dữ liệu)
+│   │   └── refreshScheduler.js
+│   ├── scripts/                   # Các script tiện ích (ví dụ: điền dữ liệu mẫu, backfill lịch sử)
+│   │   ├── backfillHistory.js
+│   │   └── seedStocks.js
+│   ├── server.js                  # Điểm khởi chạy của ứng dụng backend (Express)
+│   └── services/                  # Chứa các service tương tác với bên ngoài (dữ liệu thị trường, AI, chatbot)
+│       ├── aiService.js
+│       ├── chatbotService.js
+│       ├── marketDataService.js
+│       └── marketSummaryService.js
 └── frontend/
-    ├── public/
+    ├── .gitignore                 # Các tệp và thư mục bị bỏ qua bởi Git
+    ├── index.html                 # Tệp HTML gốc
+    ├── node_modules/              # Các thư viện React và frontend khác
+    ├── package.json               # Danh sách dependency và script của frontend
+    ├── package-lock.json          # Ghi lại phiên bản chính xác của các dependency
+    ├── public/                    # Tài nguyên tĩnh (ví dụ: hình ảnh, favicon)
+    ├── postcss.config.js          # Cấu hình PostCSS (thường dùng với Tailwind CSS)
     ├── src/
-    │   ├── App.jsx           # Component chính của ứng dụng React, định nghĩa routes
-    │   ├── components/       # Các component UI có thể tái sử dụng
-    │   ├── contexts/         # Quản lý trạng thái toàn cục (xác thực, chủ đề, ngôn ngữ)
-    │   ├── pages/            # Các trang chính của ứng dụng
-    │   ├── services/         # Service để gọi API backend
-    │   ├── utils/            # Các hàm tiện ích
-    │   ├── index.css         # Styling CSS
-    │   └── main.jsx          # Điểm khởi chạy của ứng dụng React
-    ├── node_modules/
-    ├── package.json
-    └── vite.config.js        # Cấu hình Vite cho frontend
+    │   ├── App.jsx                # Component chính của ứng dụng React, định nghĩa routes
+    │   ├── components/            # Các component UI có thể tái sử dụng
+    │   │   ├── AIChatWidget.jsx
+    │   │   ├── ArticleForm.jsx
+    │   │   ├── MarketBoard.jsx
+    │   │   ├── MarketSummarySection.jsx
+    │   │   ├── Navbar.jsx
+    │   │   ├── ProtectedRoute.jsx
+    │   │   ├── SingleMarketOverviewTable.jsx
+    │   │   ├── StockCard.jsx
+    │   │   ├── Toast.jsx
+    │   │   └── TopNewsSection.jsx
+    │   ├── contexts/              # Quản lý trạng thái toàn cục (xác thực, chủ đề, ngôn ngữ)
+    │   │   ├── AuthContext.jsx
+    │   │   ├── I18nContext.jsx
+    │   │   └── ThemeContext.jsx
+    │   ├── index.css              # Styling CSS
+    │   ├── main.jsx               # Điểm khởi chạy của ứng dụng React
+    │   ├── pages/                 # Các trang chính của ứng dụng
+    │   │   ├── AIChatPage.jsx
+    │   │   ├── ArticleDetailPage.jsx
+    │   │   ├── Dashboard.jsx
+    │   │   ├── EditArticlePage.jsx
+    │   │   ├── EditorDashboard.jsx
+    │   │   ├── Login.jsx
+    │   │   ├── NewArticlePage.jsx
+    │   │   ├── NewsPage.jsx
+    │   │   ├── Register.jsx
+    │   │   ├── ReviewArticlePage.jsx
+    │   │   ├── StockDetail.jsx
+    │   │   └── WriterDashboard.jsx
+    │   ├── services/              # Service để gọi API backend
+    │   │   ├── api.js
+    │   │   └── marketService.js
+    │   └── utils/                 # Các hàm tiện ích
+    ├── tailwind.config.js         # Cấu hình Tailwind CSS
+    └── vite.config.js             # Cấu hình Vite cho frontend
 ```
 
 ## Giải thích các tệp code quan trọng (Thay đổi và Bổ sung)
@@ -230,6 +307,7 @@ Dự án này có tiềm năng phát triển rất lớn. Dưới đây là mộ
     *   **Hệ thống cảnh báo thông minh:** Tích hợp các cảnh báo AI dựa trên điều kiện thị trường, tin tức hoặc các chỉ số phân tích.
     *   **Backtesting chiến lược:** Cho phép nhà đầu tư thử nghiệm các chiến lược giao dịch với dữ liệu lịch sử.
     *   **Tích hợp nhiều sàn giao dịch:** Hỗ trợ kết nối với nhiều sàn giao dịch khác nhau.
+    *   **Tính năng Tin tức Nâng cao:** Phát triển các tính năng như tìm kiếm, lọc tin tức theo chủ đề/mã cổ phiếu, và cá nhân hóa nguồn cấp tin tức cho người dùng.
 
 4.  **Cải thiện giao diện người dùng:**
     *   **Biểu đồ tương tác:** Nâng cấp biểu đồ với các tính năng tương tác phong phú hơn (phóng to, thu nhỏ, thêm chỉ báo).

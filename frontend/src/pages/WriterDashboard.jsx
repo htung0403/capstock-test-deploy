@@ -28,7 +28,7 @@ function WriterDashboard() {
     try {
       setLoading(true);
       let response;
-      if (user.role === 'admin') {
+      if (user.role === 'ADMIN') {
         response = await api.get(`/writer/all-articles`); // Removed /api
       } else {
         response = await api.get(`/writer/${user.id}`); // Removed /api
@@ -41,10 +41,15 @@ function WriterDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [user?.id, user?.role]); // Added user.role to dependency array
+  }, [user?.id, user?.role]);
 
   useEffect(() => {
     if (user) {
+      if (!user.id) {
+        setError('Author ID is not available. Please login.');
+        setLoading(false);
+        return;
+      }
         // Tạm thời bỏ qua kiểm tra vai trò để phát triển và kiểm thử
         // if (user.role !== 'writer' && user.role !== 'admin') {
         //     navigate('/dashboard'); // Redirect if not authorized
