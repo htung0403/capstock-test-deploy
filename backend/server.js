@@ -22,6 +22,11 @@ const portfolioRoutes = require('./routes/portfolioRoutes');
 const aiRoutes = require('./routes/aiRoutes'); // Import the new AI routes
 const chatbotRoutes = require('./routes/chatbotRoutes'); // Import the new chatbot routes
 const paymentRoutes = require('./routes/paymentRoutes');
+const writerRoutes = require('./routes/writerRoutes'); // Import new writer routes
+const editorRoutes = require('./routes/editorRoutes'); // Import new editor routes
+const categoryRoutes = require('./routes/categoryRoutes'); // Import new category routes
+const tagRoutes = require('./routes/tagRoutes'); // Import new tag routes
+const marketRoutes = require('./routes/marketRoutes'); // Import new market routes
 
 const app = express();
 const { startScheduler } = require('./scheduler/refreshScheduler');
@@ -42,6 +47,11 @@ app.use('/api/portfolio', portfolioRoutes);
 app.use('/api/ai', aiRoutes); // Use the new AI routes
 app.use('/api/chatbot', chatbotRoutes); // Use the new chatbot routes
 app.use('/api/payments', paymentRoutes);
+app.use('/api/writer', writerRoutes); // Use new writer routes
+app.use('/api/editor', editorRoutes); // Use new editor routes
+app.use('/api/categories', categoryRoutes); // Use new category routes
+app.use('/api/tags', tagRoutes); // Use new tag routes
+app.use('/api/market', marketRoutes); // Use new market routes
 
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
