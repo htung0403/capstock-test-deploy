@@ -9,7 +9,7 @@
   - Exported `fetchStockNews`.
 */
 const axios = require('axios');
-const News = require('../models/News'); // Import News model
+// const News = require('../models/News'); // News model removed, will be handled by Article model in aiController
 
 function parseNumber(value) {
   const num = Number(value);
@@ -98,19 +98,8 @@ async function fetchStockNews(symbol, apiKey) {
       content: article.content || article.description || '', // Use content, or description, or empty string
     }));
 
-    // Save news to DB, avoiding duplicates
-    const savedNews = await Promise.all(
-      newsEntries.map(async (newsItem) => {
-        // Check if news already exists by URL and title
-        const existingNews = await News.findOne({ url: newsItem.url, title: newsItem.title });
-        if (!existingNews) {
-          return News.create(newsItem);
-        }
-        return existingNews; // Return existing if duplicate
-      })
-    );
-    console.log(`NewsAPI: Fetched and saved ${savedNews.length} news articles for ${symbol}`);
-    return savedNews;
+    console.log(`NewsAPI: Fetched ${newsEntries.length} news articles for ${symbol}`);
+    return newsEntries; // Return raw news entries, aiController will decide how to use them
   } catch (err) {
     console.error(`Error fetching news for ${symbol} from NewsAPI:`, err.message);
     throw new Error(`NewsAPI: Failed to fetch news for symbol ${symbol}`);
@@ -141,7 +130,7 @@ async function fetchDailySeries(symbol) {
 module.exports = {
   fetchQuote,
   fetchDailySeries,
-  fetchStockNews, // Export the new news fetching function
+  fetchStockNews, // Export the news fetching function
 };
 
 
