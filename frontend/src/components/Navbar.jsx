@@ -42,7 +42,30 @@ const Navbar = () => {
           </svg>
           <span>{t('app.brand')}</span>
           <span className="badge">{t('app.beta')}</span>
+          
+          {/* News link next to brand mark */}
+          {isAuthenticated && (
+            <Link
+              to="/news"
+              className="ml-3 flex items-center text-sm font-medium transition-colors hover:text-cyan-400"
+              style={{ color: 'var(--text)' }}
+            >
+              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v10a2 2 0 002 2h2m-2 2l4-4m0 0l4-4m-4 4L9 9m3-5h4a2 2 0 012 2v10a2 2 0 01-2 2H9a2 2 0 01-2-2V6a2 2 0 012-2zm0 0z" /></svg>
+              News
+            </Link>
+          )}
         </Link>
+
+        {/* Original News link - now removed */}
+        {/* {isAuthenticated && (
+          <Link
+            to="/news"
+            className="ml-4 text-sm font-medium transition-colors hover:text-cyan-400"
+            style={{ color: 'var(--text)' }}
+          >
+            Tin tức
+          </Link>
+        )} */}
 
         <div className="flex items-center gap-3">
           <div className="scale-[0.3] origin-center">
@@ -130,6 +153,51 @@ const Navbar = () => {
                       Profile
                     </Link>
 
+                    {/* Writer Links */}
+                    {/* (user?.role === 'WRITER' || user?.role === 'ADMIN') && (*/}
+                      <>
+                        <Link
+                          to="/writer/dashboard"
+                          className="flex items-center gap-3 px-4 py-2 text-sm transition-colors"
+                          style={{ color: 'var(--text)' }}
+                          onMouseEnter={(e) => e.target.style.backgroundColor = 'rgba(148,163,184,0.1)'}
+                          onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                          onClick={() => setIsDropdownOpen(false)}
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                          Writer Dashboard
+                        </Link>
+                        <Link
+                          to="/writer/new-article"
+                          className="flex items-center gap-3 px-4 py-2 text-sm transition-colors"
+                          style={{ color: 'var(--text)' }}
+                          onMouseEnter={(e) => e.target.style.backgroundColor = 'rgba(148,163,184,0.1)'}
+                          onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                          onClick={() => setIsDropdownOpen(false)}
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                          New Article
+                        </Link>
+                      </>
+                    {/* )*/}
+
+                    {/* Editor Links */}
+                    {/* (user?.role === 'EDITOR' || user?.role === 'ADMIN') && (*/}
+                      <>
+                        <Link
+                          to="/editor/dashboard"
+                          className="flex items-center gap-3 px-4 py-2 text-sm transition-colors"
+                          style={{ color: 'var(--text)' }}
+                          onMouseEnter={(e) => e.target.style.backgroundColor = 'rgba(148,163,184,0.1)'}
+                          onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                          onClick={() => setIsDropdownOpen(false)}
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 002-2h2a2 2 0 002 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
+                          Editor Dashboard
+                        </Link>
+                      </>
+                    {/* )*/}
+
                     <Link
                       to="/payments"
                       className="flex items-center gap-3 px-4 py-2 text-sm transition-colors"
@@ -158,7 +226,6 @@ const Navbar = () => {
                       Lệnh giao dịch
                     </Link>
 
-                    {/* New Link for AI Chat Page */}
                     <Link
                       to="/chatbot"
                       className="flex items-center gap-3 px-4 py-2 text-sm transition-colors"
