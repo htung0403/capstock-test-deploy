@@ -5,6 +5,8 @@ import { Link } from "react-router-dom";
 import api from "../services/api";
 import BuyModal from "../components/BuyModal";
 import SellModal from "../components/SellModal";
+import MarketSummarySection from "../components/MarketSummarySection"; // Import new component
+import TopNewsSection from "../components/TopNewsSection"; // Import TopNewsSection
 
 const Dashboard = () => {
   const { user, logout, refreshUser } = useAuth();
@@ -137,6 +139,9 @@ const Dashboard = () => {
 
       {/* Main content */}
       <main className="container mx-auto px-4 pb-8">
+        {/* Market Overview Snapshot */}
+        <MarketSummarySection />
+
         {error && (
           <div className={`mb-6 p-4 rounded-xl border transition-colors duration-300 ${
             isDark 
@@ -224,6 +229,12 @@ const Dashboard = () => {
                 isDark ? 'text-slate-400' : 'text-gray-600'
               }`}>No stocks available</p>
             )}
+
+            {/* Top News Section */}
+            <div className="mt-6">
+              <TopNewsSection limit={5} /> {/* Display top 5 news articles */}
+            </div>
+
           </div>
 
           <div className="space-y-6">
@@ -441,8 +452,8 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Quick Actions
-        <div className={`mt-8 backdrop-blur-sm rounded-xl p-6 border transition-colors duration-300 ${
+        {/* Quick Actions */}
+        {/* <div className={`mt-8 backdrop-blur-sm rounded-xl p-6 border transition-colors duration-300 ${
           isDark 
             ? 'bg-white/10 border-white/20' 
             : 'bg-white/80 border-gray-200'
@@ -528,23 +539,6 @@ const Dashboard = () => {
           </div>
         </div> */}
       </main>
-
-      {/* Buy Modal Component */}
-      <BuyModal
-        isOpen={showBuyModal}
-        onClose={closeBuyModal}
-        stock={selectedStock}
-        onBuySuccess={handleBuySuccess}
-      />
-
-      {/* Sell Modal Component */}
-      <SellModal
-        isOpen={showSellModal}
-        onClose={closeSellModal}
-        stock={selectedHolding?.stock}
-        userHolding={selectedHolding}
-        onSellSuccess={handleSellSuccess}
-      />
     </div>
   );
 };
