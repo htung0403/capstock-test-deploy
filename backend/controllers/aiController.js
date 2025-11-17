@@ -9,7 +9,7 @@
 */
 const aiService = require('../services/aiService');
 const StockHistory = require('../models/StockHistory'); // Import StockHistory model
-const News = require('../models/News'); // Import News model
+const Article = require('../models/Article'); // Import Article model (replaces News model)
 const { fetchStockNews } = require('../services/marketDataService'); // Import fetchStockNews
 
 exports.analyzeSentiment = async (req, res) => {
@@ -59,28 +59,51 @@ exports.getComprehensiveAnalysis = async (req, res) => {
       return res.status(400).json({ message: 'Stock symbol is required.' });
     }
 
-    // 1. Fetch and analyze sentiment from news
-    // First, try to fetch fresh news (if not already fetched recently by scheduler)
-    let newsArticles = await News.find({ symbol: symbol.toUpperCase() }).sort({ publishedAt: -1 }).limit(10);
-    if (newsArticles.length === 0) {
-        console.log(`No recent news found for ${symbol} in DB, fetching from NewsAPI...`);
+    // 1. Fetch and analyze sentiment from news/articles
+    let allArticles = [];
+
+    // First, try to fetch published articles from your internal system
+    const internalArticles = await Article.find({ symbol: symbol.toUpperCase(), status: 'published' })
+      .sort({ publishedAt: -1 })
+      .limit(10);
+
+    if (internalArticles.length > 0) {
+      console.log(`Found ${internalArticles.length} published internal articles for ${symbol}.`);
+      // Map internal articles to a common structure for sentiment analysis
+      const mappedInternalArticles = internalArticles.map(article => ({
+        title: article.title,
+        description: article.summary,
+        url: `internal-article/${article._id}`,
+        source: 'Internal',
+        publishedAt: article.publishedAt,
+        symbol: article.symbol,
+        content: article.content,
+      }));
+      allArticles = [...mappedInternalArticles];
+    }
+
+    // If not enough internal articles or to supplement, fetch from NewsAPI
+    if (allArticles.length < 10) { // Try to get up to 10 articles in total
+        console.log(`Fetching additional news for ${symbol} from NewsAPI...`);
         try {
             const NEWS_API_KEY = process.env.NEWS_API_KEY;
             if (!NEWS_API_KEY) throw new Error('Missing NEWS_API_KEY in environment');
-            newsArticles = await fetchStockNews(symbol, NEWS_API_KEY);
+            const externalNews = await fetchStockNews(symbol, NEWS_API_KEY);
+            // Filter out duplicates if any, based on title/url if a simple string comparison is feasible
+            // For now, just add them, sophisticated deduplication can be added later
+            allArticles = [...allArticles, ...externalNews].slice(0, 10); // Cap at 10 total
         } catch (newsError) {
-            console.error(`Failed to fetch fresh news for ${symbol}:`, newsError.message);
-            // Continue with existing news or no news if fetching fails
+            console.error(`Failed to fetch fresh news for ${symbol} from NewsAPI:`, newsError.message);
         }
     }
     
     let sentimentAnalysis = [];
-    if (newsArticles.length > 0) {
-      const newsTexts = newsArticles.map(n => n.title + ". " + n.description).join(" ");
+    if (allArticles.length > 0) {
+      const newsTexts = allArticles.map(n => n.title + ". " + (n.description || n.content)).join(" ");
       const overallSentiment = await aiService.getSentiment(newsTexts);
       sentimentAnalysis.push({ type: 'overall', sentiment: overallSentiment });
     } else {
-        sentimentAnalysis.push({ type: 'overall', sentiment: 'No news for analysis' });
+        sentimentAnalysis.push({ type: 'overall', sentiment: 'No news or articles for analysis' });
     }
 
     // 2. Fetch and analyze historical price data
@@ -128,7 +151,7 @@ exports.getComprehensiveAnalysis = async (req, res) => {
       recommendation.short_term = 'Hold';
     }
 
-    res.json({ symbol, analysis: recommendation, raw_news: newsArticles });
+    res.json({ symbol, analysis: recommendation, raw_news: allArticles });
   } catch (error) {
     console.error('Error getting comprehensive analysis:', error);
     res.status(500).json({ message: 'Failed to get comprehensive analysis.', error: error.message });
