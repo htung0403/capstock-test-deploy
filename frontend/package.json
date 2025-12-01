@@ -13,11 +13,13 @@
     "@google-cloud/vertexai": "^1.10.0",
     "@tinymce/tinymce-react": "^6.3.0",
     "axios": "^1.6.2",
+    "lightweight-charts": "^5.0.9",
     "lucide-react": "^0.294.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.20.1",
     "react-toastify": "^11.0.5",
+    "react-tradingview-embed": "^3.0.6",
     "recharts": "^3.2.1",
     "tinymce": "^8.2.1"
   },

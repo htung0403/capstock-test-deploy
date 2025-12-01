@@ -27,6 +27,7 @@ const editorRoutes = require('./routes/editorRoutes'); // Import new editor rout
 const categoryRoutes = require('./routes/categoryRoutes'); // Import new category routes
 const tagRoutes = require('./routes/tagRoutes'); // Import new tag routes
 const marketRoutes = require('./routes/marketRoutes'); // Import new market routes
+const uploadRoutes = require('./routes/uploadRoutes'); // Import new upload routes
 
 const app = express();
 const { startScheduler } = require('./scheduler/refreshScheduler');
@@ -52,6 +53,7 @@ app.use('/api/editor', editorRoutes); // Use new editor routes
 app.use('/api/categories', categoryRoutes); // Use new category routes
 app.use('/api/tags', tagRoutes); // Use new tag routes
 app.use('/api/market', marketRoutes); // Use new market routes
+app.use('/api/upload', uploadRoutes); // Use new upload routes
 
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'ok' }));

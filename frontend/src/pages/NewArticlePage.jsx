@@ -25,9 +25,24 @@ function NewArticlePage() {
   // }
 
   return (
-    <div className={`min-h-screen ${isDark ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-900'}`}>
-      <div className="container mx-auto p-4">
-        <h2 className={`text-3xl font-bold mb-6 ${isDark ? 'text-white' : 'text-gray-800'}`}>Create New Article</h2>
+    <div className={`min-h-screen transition-colors duration-200 ${
+      isDark 
+        ? 'bg-gray-900 text-white' 
+        : 'bg-gradient-to-br from-gray-50 via-white to-gray-50 text-gray-900'
+    }`}>
+      <div className="container mx-auto px-4 py-8 max-w-9xl">
+        <div className="mb-8">
+          <h2 className={`text-4xl font-bold mb-2 transition-colors duration-200 ${
+            isDark ? 'text-white' : 'text-gray-900'
+          }`}>
+            Create New Article
+          </h2>
+          <p className={`text-sm transition-colors duration-200 ${
+            isDark ? 'text-gray-400' : 'text-gray-600'
+          }`}>
+            Fill in the form below to create a new article
+          </p>
+        </div>
         <ArticleForm authorId={user?.id} onSave={handleSave} />
       </div>
     </div>

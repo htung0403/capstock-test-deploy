@@ -236,8 +236,11 @@ Stock-Cap/
         ALPHA_VANTAGE_KEY=your_alpha_vantage_api_key_here
         NEWS_API_KEY=your_news_api_key_here
         GEMINI_API_KEY=your_gemini_api_key_here
+        CLOUDINARY_CLOUD_NAME=your_cloudinary_cloud_name
+        CLOUDINARY_API_KEY=your_cloudinary_api_key
+        CLOUDINARY_API_SECRET=your_cloudinary_api_secret
         ```
-    *   Bạn cần đăng ký tài khoản tại [NewsAPI.org](https://newsapi.org/) và [Google AI Studio](https://aistudio.google.com/) hoặc [Google Cloud Console](https://console.cloud.google.com/vertex-ai/model-garden) để lấy các khóa API cần thiết.
+    *   Bạn cần đăng ký tài khoản tại [NewsAPI.org](https://newsapi.org/), [Google AI Studio](https://aistudio.google.com/) hoặc [Google Cloud Console](https://console.cloud.google.com/vertex-ai/model-garden), và [Cloudinary](https://cloudinary.com/) để lấy các khóa API cần thiết.
 
 3.  **Cài đặt Dependency Backend:**
     ```bash
