@@ -26,7 +26,16 @@ exports.protect = async (req, res, next) => {
       return res.status(401).json({ message: 'User not found' });
     }
 
-    req.user = { id: user._id.toString(), role: user.role };
+    // Check if user is banned
+    if (user.isBanned) {
+      return res.status(403).json({ message: 'Account is banned. Please contact administrator.' });
+    }
+
+    req.user = { 
+      id: user._id.toString(), 
+      role: user.role,
+      roles: user.roles || [user.role || 'USER'],
+    };
     next();
   } catch (err) {
     return res.status(401).json({ message: 'Unauthorized', error: err.message });
@@ -39,10 +48,29 @@ exports.authorize = (roles = []) => {
     roles = [roles];
   }
   return (req, res, next) => {
-    // Tạm thời bỏ qua kiểm tra vai trò để phát triển và kiểm thử
-    // if (!req.user || !roles.includes(req.user.role)) {
-    //   return res.status(403).json({ message: 'Forbidden - Insufficient role' });
-    // }
+    if (!req.user) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+    
+    // Check if user has any of the required roles
+    const userRoles = req.user.roles || [req.user.role];
+    const hasRequiredRole = roles.some(role => userRoles.includes(role));
+    
+    if (!hasRequiredRole) {
+      return res.status(403).json({ message: 'Forbidden - Insufficient role' });
+    }
     next();
   };
+};
+
+// Admin-only access
+exports.admin = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+  const userRoles = req.user.roles || [req.user.role];
+  if (!userRoles.includes('ADMIN')) {
+    return res.status(403).json({ message: 'Forbidden - Admin access required' });
+  }
+  next();
 }; 
