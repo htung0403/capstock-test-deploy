@@ -3,25 +3,26 @@
   Purpose: Schedule periodic stock refresh tasks based on environment flags.
 */
 const cron = require('node-cron');
-const axios = require('axios');
+const stockService = require('../services/stockService'); // Import the new stockService
 
 function startScheduler(baseUrl) {
   const enabled = (process.env.REFRESH_CRON_ENABLED || 'false').toLowerCase() === 'true';
-  const interval = process.env.REFRESH_CRON_SCHEDULE || '*/5 * * * *'; // every 5 min
+  // Default to every hour (0 * * * *) instead of every 5 minutes
+  // This helps avoid hitting Alpha Vantage's 25 requests/day limit
+  // You can override with REFRESH_CRON_SCHEDULE env variable
+  const interval = process.env.REFRESH_CRON_SCHEDULE || '0 * * * *'; // every hour at minute 0
   if (!enabled) {
     return { stop: () => {} };
   }
 
   // eslint-disable-next-line no-console
-  console.log(`Refresh scheduler enabled. Cron: ${interval}`);
+  console.log(`Refresh scheduler enabled. Cron: ${interval} (Note: Alpha Vantage free tier allows 25 requests/day)`);
 
   const task = cron.schedule(interval, async () => {
     try {
-      // Call internal endpoint; assumes no auth for internal call. If protected, you can switch to direct controller invocation instead.
-      await axios.post(`${baseUrl}/api/stocks/refresh`, {}, {
-        timeout: 20000,
-        // Optionally include internal token header if needed
-      });
+      // Directly call the service function to refresh stocks
+      // The service will only refresh stocks that need it (older than 1 hour)
+      await stockService.refreshAllStocksData();
       // eslint-disable-next-line no-console
       console.log('Cron: stocks refreshed');
     } catch (err) {
