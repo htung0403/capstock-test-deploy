@@ -4,10 +4,13 @@
 */
 const Stock = require('../models/Stock');
 const StockHistory = require('../models/StockHistory');
+const DailyPrice = require('../models/DailyPrice');
 const { fetchQuote, fetchDailySeries } = require('../services/marketDataService');
+const stockService = require('../services/stockService'); // Import the new stockService
 
 exports.getStocks = async (req, res) => {
-  const stocks = await Stock.find();
+  // Sort by symbol for consistent ordering, or by currentPrice descending to show most valuable first
+  const stocks = await Stock.find().sort({ symbol: 1 });
   res.json(stocks);
 };
 
@@ -27,6 +30,7 @@ exports.updateStock = async (req, res) => {
 };
 
 // Get history snapshots for a symbol
+// Priority: DailyPrice (from backfill) > StockHistory (from real-time updates)
 exports.getHistoryBySymbol = async (req, res) => {
   try {
     const { symbol } = req.params;
@@ -34,6 +38,44 @@ exports.getHistoryBySymbol = async (req, res) => {
     const from = req.query.from ? new Date(req.query.from) : null;
     const to = req.query.to ? new Date(req.query.to) : null;
 
+    // Try DailyPrice first (from backfill script)
+    let dailyPriceQuery = { symbol: symbol.toUpperCase() };
+    if (from || to) {
+      // Convert Date to YYYY-MM-DD string for DailyPrice
+      const dateFilter = {};
+      if (from) {
+        const fromStr = from.toISOString().split('T')[0];
+        dateFilter.$gte = fromStr;
+      }
+      if (to) {
+        const toStr = to.toISOString().split('T')[0];
+        dateFilter.$lte = toStr;
+      }
+      if (Object.keys(dateFilter).length > 0) {
+        dailyPriceQuery.date = dateFilter;
+      }
+    }
+
+    const dailyPrices = await DailyPrice.find(dailyPriceQuery)
+      .sort({ date: 1 })
+      .limit(limit);
+
+    // If we have DailyPrice data, use it (convert to StockHistory format)
+    if (dailyPrices.length > 0) {
+      const history = dailyPrices.map(dp => ({
+        stockSymbol: dp.symbol,
+        price: dp.close,
+        open: dp.open,
+        high: dp.high,
+        low: dp.low,
+        close: dp.close,
+        volume: dp.volume,
+        timestamp: new Date(dp.date), // Convert YYYY-MM-DD string to Date
+      }));
+      return res.json(history);
+    }
+
+    // Fallback to StockHistory (for real-time updates)
     const query = { stockSymbol: symbol };
     if (from || to) {
       query.timestamp = {};
@@ -90,41 +132,11 @@ exports.refreshStockBySymbol = async (req, res) => {
 // Refresh live prices for all known symbols in the DB (best-effort)
 exports.refreshAllStocks = async (req, res) => {
   try {
-    const stocks = await Stock.find({}, { symbol: 1 });
-    const results = [];
-    for (const s of stocks) {
-      try {
-        const quote = await fetchQuote(s.symbol);
-        const update = {
-          currentPrice: quote.currentPrice,
-          open: quote.open,
-          high: quote.high,
-          low: quote.low,
-          close: quote.close,
-          volume: quote.volume,
-          updatedAt: new Date(),
-        };
-        await Stock.updateOne({ _id: s._id }, update);
-        if (update.currentPrice != null) {
-          await StockHistory.create({
-            stockSymbol: s.symbol,
-            price: update.currentPrice,
-            open: update.open,
-            high: update.high,
-            low: update.low,
-            close: update.close,
-            volume: update.volume ?? 0,
-            timestamp: new Date(),
-          });
-        }
-        results.push({ symbol: s.symbol, ok: true, provider: quote.provider });
-      } catch (e) {
-        results.push({ symbol: s.symbol, ok: false, error: e.message });
-      }
-    }
-    res.json({ message: 'Refresh completed', count: stocks.length, results });
+    const results = await stockService.refreshAllStocksData(); // Call the service function
+    res.json({ message: 'Refresh completed', count: results.length, results });
   } catch (err) {
-    res.status(400).json({ message: err.message });
+    console.error('Error refreshing all stocks:', err);
+    res.status(500).json({ message: 'Failed to refresh all stocks.', error: err.message });
   }
 };
 
