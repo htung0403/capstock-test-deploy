@@ -1,13 +1,15 @@
 /*
   File: services/matchingEngine.js
   Purpose: Handle order matching logic for Market, Limit, Stop, and Stop-Limit orders
+  Refactored: Added MongoDB transactions, idempotency checks, and centralized position updates
 */
 
+const mongoose = require('mongoose');
 const Order = require('../models/Order');
 const Stock = require('../models/Stock');
 const User = require('../models/User');
-const Portfolio = require('../models/Portfolio');
 const Transaction = require('../models/Transaction');
+const positionService = require('./positionService');
 
 class MatchingEngine {
   /**
@@ -209,11 +211,16 @@ class MatchingEngine {
   }
 
   /**
-   * Validate order before execution
+   * Validate order before execution (pre-flight check, not in transaction)
+   * Note: Final validation happens inside executeOrder within transaction
    */
   async validateOrder(order, executionPrice) {
     const user = await User.findById(order.user);
     
+    if (!user) {
+      return { valid: false, reason: 'User not found' };
+    }
+
     if (order.type === 'BUY') {
       // Check if user has enough balance
       const totalCost = executionPrice * order.quantity;
@@ -224,17 +231,14 @@ class MatchingEngine {
           reason: `Insufficient balance. Need $${totalCost.toFixed(2)}, have $${user.balance.toFixed(2)}` 
         };
       }
-    } else {
+    } else { // SELL order
       // Check if user has enough shares
-      const portfolio = await Portfolio.findOne({ 
-        user: order.user, 
-        stock: order.stock 
-      });
-
-      if (!portfolio || portfolio.quantity < order.quantity) {
+      const position = await positionService.getPosition(order.user, order.stock);
+      
+      if (!position || position.quantity < order.quantity) {
         return { 
           valid: false, 
-          reason: `Insufficient shares. Have ${portfolio?.quantity || 0}, need ${order.quantity}` 
+          reason: `Insufficient shares of ${order.stockSymbol}. Have ${position?.quantity || 0}, need ${order.quantity}` 
         };
       }
     }
@@ -244,115 +248,214 @@ class MatchingEngine {
 
   /**
    * Execute the order (update user balance, portfolio, create transaction)
+   * REFACTORED: Now uses MongoDB transactions and idempotency checks
+   * This is the ONLY place where orders are executed and positions are updated
    */
   async executeOrder(order, executionPrice, quantity) {
-    const user = await User.findById(order.user);
+    const session = await mongoose.startSession();
     
-    // Validate inputs to prevent NaN
-    if (!executionPrice || executionPrice <= 0) {
-      throw new Error('Invalid execution price');
-    }
-    if (!quantity || quantity <= 0) {
-      throw new Error('Invalid quantity');
-    }
-    
-    const totalAmount = executionPrice * quantity;
-
-    console.log(`💰 Executing order:`, {
-      type: order.type,
-      executionPrice,
-      quantity,
-      totalAmount,
-      userBalance: user.balance
-    });
-
     try {
-      if (order.type === 'BUY') {
-        // Deduct balance
-        user.balance -= totalAmount;
-        await user.save();
-
-        // Update or create portfolio
-        let portfolio = await Portfolio.findOne({ 
-          user: order.user, 
-          stock: order.stock 
-        });
-
-        if (portfolio) {
-          // Update average buy price
-          const totalCost = (portfolio.avgBuyPrice * portfolio.quantity) + totalAmount;
-          portfolio.quantity += quantity;
-          portfolio.avgBuyPrice = totalCost / portfolio.quantity;
-          await portfolio.save();
-        } else {
-          // Create new portfolio entry
-          portfolio = await Portfolio.create({
-            user: order.user,
-            stock: order.stock,
-            quantity: quantity,
-            avgBuyPrice: executionPrice
-          });
-        }
-
-      } else {
-        // SELL
-        // Add to balance
-        user.balance += totalAmount;
-        await user.save();
-
-        // Update portfolio
-        const portfolio = await Portfolio.findOne({ 
-          user: order.user, 
-          stock: order.stock 
-        });
-
-        portfolio.quantity -= quantity;
-        
-        if (portfolio.quantity === 0) {
-          await portfolio.deleteOne();
-        } else {
-          await portfolio.save();
-        }
+      // Validate inputs
+      if (!executionPrice || executionPrice <= 0 || isNaN(executionPrice)) {
+        throw new Error('Invalid execution price');
+      }
+      if (!quantity || quantity <= 0 || isNaN(quantity)) {
+        throw new Error('Invalid quantity');
       }
 
-      // Update order
-      order.filledQuantity = quantity;
-      order.avgFilledPrice = executionPrice;
-      order.totalAmount = totalAmount;
-      order.status = 'FILLED';
-      order.executedAt = new Date();
-      await order.save();
+      const totalAmount = executionPrice * quantity;
 
-      // Create transaction record
-      await Transaction.create({
-        user: order.user,
-        type: order.type.toLowerCase(),
-        stock: order.stock,
-        quantity: quantity,
-        price: executionPrice,
-        amount: totalAmount,
-        orderId: order._id
+      console.log(`💰 Executing order (with transaction):`, {
+        orderId: order._id.toString(),
+        type: order.type,
+        executionPrice,
+        quantity,
+        totalAmount,
       });
 
-      console.log(`✅ Order executed: ${order.type} ${quantity} shares at $${executionPrice}`);
+      // Execute within transaction
+      await session.withTransaction(async () => {
+        // IDEMPOTENCY CHECK: Reload order within transaction to prevent double-fill
+        // Use findOneAndUpdate with status check to ensure atomicity (optimistic locking)
+        const currentOrder = await Order.findOneAndUpdate(
+          {
+            _id: order._id,
+            status: { $in: ['PENDING', 'TRIGGERED', 'PARTIALLY_FILLED'] },
+            // Additional check: ensure filledQuantity hasn't changed
+            $expr: { $lt: ['$filledQuantity', '$quantity'] },
+          },
+          { $set: { status: 'PARTIALLY_FILLED' } }, // Set to PARTIALLY_FILLED as lock (will update to FILLED later if needed)
+          { session, new: true }
+        );
 
-      return { 
-        success: true, 
-        message: `Order filled: ${order.type} ${quantity} shares at $${executionPrice.toFixed(2)}`,
-        order,
-        executionPrice,
-        totalAmount
+        if (!currentOrder) {
+          // Order not found or already filled/cancelled - reload to check actual status
+          const checkOrder = await Order.findById(order._id).session(session);
+          if (checkOrder) {
+            console.log(`⚠️ Order ${order._id} status is ${checkOrder.status}, filledQty: ${checkOrder.filledQuantity || 0}, cannot execute`);
+            throw new Error(`Order already ${checkOrder.status} or fully filled`);
+          }
+          throw new Error('Order not found');
+        }
+
+        // Check remaining quantity (double-check after atomic update)
+        const filledQty = currentOrder.filledQuantity || 0;
+        const remainingQty = currentOrder.quantity - filledQty;
+
+        console.log('🔍 IDEMPOTENCY CHECK:', {
+          orderId: currentOrder._id.toString(),
+          status: currentOrder.status,
+          quantity: currentOrder.quantity,
+          filledQty,
+          remainingQty,
+        });
+
+        if (remainingQty <= 0) {
+          console.log(`⚠️ Order ${currentOrder._id} already fully filled (remainingQty: ${remainingQty})`);
+          throw new Error('Order already fully filled');
+        }
+
+        // Use remaining quantity (for now, full fill only - partial fills can be added later)
+        const fillQty = Math.min(quantity, remainingQty);
+
+        // Validate balance/holdings within transaction
+        const user = await User.findById(currentOrder.user).session(session);
+        if (!user) {
+          throw new Error('User not found');
+        }
+
+        if (currentOrder.type === 'BUY') {
+          if (user.balance < totalAmount) {
+            throw new Error(
+              `Insufficient balance. Need $${totalAmount.toFixed(2)}, have $${user.balance.toFixed(2)}`
+            );
+          }
+        } else {
+          // SELL: Validate holdings
+          const position = await positionService.getPosition(
+            currentOrder.user,
+            currentOrder.stock,
+            session
+          );
+          if (!position || position.quantity < fillQty) {
+            throw new Error(
+              `Insufficient shares. Have ${position?.quantity || 0}, need ${fillQty}`
+            );
+          }
+        }
+
+        // 1. Create Trade record (using Transaction model)
+        await Transaction.create(
+          [
+            {
+              user: currentOrder.user,
+              type: currentOrder.type.toLowerCase(),
+              stock: currentOrder.stock,
+              quantity: fillQty,
+              price: executionPrice,
+              amount: totalAmount,
+              orderId: currentOrder._id,
+            },
+          ],
+          { session }
+        );
+
+        // 2. Update Position (ONLY through positionService - single source of truth)
+        console.log('📊 About to apply fill to position:', {
+          orderId: currentOrder._id.toString(),
+          userId: currentOrder.user.toString(),
+          stockId: currentOrder.stock.toString(),
+          side: currentOrder.type,
+          price: executionPrice,
+          quantity: fillQty,
+        });
+
+        const positionResult = await positionService.applyFillToPosition({
+          userId: currentOrder.user,
+          stockId: currentOrder.stock,
+          side: currentOrder.type,
+          price: executionPrice,
+          quantity: fillQty,
+          session,
+        });
+
+        console.log('✅ Position updated result:', positionResult);
+
+        // 3. Update Balance
+        if (currentOrder.type === 'BUY') {
+          await User.updateOne(
+            { _id: currentOrder.user },
+            { $inc: { balance: -totalAmount } },
+            { session }
+          );
+        } else {
+          await User.updateOne(
+            { _id: currentOrder.user },
+            { $inc: { balance: totalAmount } },
+            { session }
+          );
+        }
+
+        // 4. Update Order (calculate weighted average fill price)
+        const prevFilled = currentOrder.filledQuantity || 0;
+        const prevAvg = currentOrder.avgFilledPrice || 0;
+        const newFilled = prevFilled + fillQty;
+
+        const newAvg =
+          newFilled === 0
+            ? executionPrice
+            : (prevAvg * prevFilled + executionPrice * fillQty) / newFilled;
+
+        const newStatus = newFilled >= currentOrder.quantity ? 'FILLED' : 'PARTIALLY_FILLED';
+
+        await Order.updateOne(
+          { _id: currentOrder._id },
+          {
+            $set: {
+              filledQuantity: newFilled,
+              avgFilledPrice: newAvg,
+              status: newStatus,
+              totalAmount: newAvg * newFilled,
+              executedAt: new Date(),
+            },
+          },
+          { session }
+        );
+
+        console.log(`✅ Order executed (transaction committed): ${currentOrder.type} ${fillQty} shares at $${executionPrice}`);
+      });
+
+      // Reload order after transaction
+      const updatedOrder = await Order.findById(order._id).populate('stock');
+
+      return {
+        success: true,
+        message: `Order filled: ${updatedOrder.type} ${updatedOrder.filledQuantity} shares at $${updatedOrder.avgFilledPrice.toFixed(2)}`,
+        order: updatedOrder,
+        executionPrice: updatedOrder.avgFilledPrice,
+        totalAmount: updatedOrder.totalAmount,
       };
-
     } catch (error) {
-      console.error('❌ Error executing order:', error);
-      
-      // Rollback if needed
-      order.status = 'REJECTED';
-      order.reason = error.message;
-      await order.save();
+      console.error('❌ Error executing order (transaction will rollback):', error);
+
+      // Mark order as rejected (outside transaction, as transaction may have rolled back)
+      try {
+        await Order.updateOne(
+          { _id: order._id },
+          {
+            $set: {
+              status: 'REJECTED',
+              reason: error.message,
+            },
+          }
+        );
+      } catch (updateError) {
+        console.error('Failed to update order status:', updateError);
+      }
 
       throw error;
+    } finally {
+      await session.endSession();
     }
   }
 

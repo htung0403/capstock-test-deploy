@@ -32,12 +32,13 @@ const getStockSummary = async (symbol) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // Get history for the last 2 days to ensure we have previous close
-  const twoDaysAgo = new Date(today);
-  twoDaysAgo.setDate(today.getDate() - 2);
+  // Get history for the last 7 days to ensure we have previous close
+  // This helps when scheduler refreshes multiple times per day
+  const sevenDaysAgo = new Date(today);
+  sevenDaysAgo.setDate(today.getDate() - 7);
 
-  const history = await getStockHistoryForSummary(symbol, twoDaysAgo);
-  console.log(`Service: History for ${symbol} (last 2 days):`, history.map(h => ({ timestamp: h.timestamp, price: h.price, close: h.close })));
+  const history = await getStockHistoryForSummary(symbol, sevenDaysAgo);
+  console.log(`Service: History for ${symbol} (last 7 days, ${history.length} entries):`, history.length > 0 ? history.map(h => ({ date: new Date(h.timestamp).toISOString().split('T')[0], price: h.price, close: h.close })) : 'No history');
 
   let latestPrice = null;
   let previousClose = null;
@@ -72,10 +73,16 @@ const getStockSummary = async (symbol) => {
     return null;
   }
 
+  // If no history, use currentPrice from Stock model as fallback
+  if (latestPrice === null && stock.currentPrice) {
+    latestPrice = stock.currentPrice;
+    console.log(`Service: Using currentPrice from Stock model for ${symbol}: ${latestPrice}`);
+  }
+
   return {
     symbol: stock.symbol,
     name: stock.name,
-    currentPrice: latestPrice, // Use latest price from history
+    currentPrice: latestPrice || stock.currentPrice || 0, // Use latest price from history, or fallback to stock.currentPrice
     change,
     change_pct,
     volume, // Latest volume
@@ -170,7 +177,8 @@ const getSummaryForSymbols = async (symbols) => {
  */
 const getTopNStocksSummary = async (limit = 10) => {
   console.log(`Service: Fetching top ${limit} stocks summary.`);
-  const allStocks = await Stock.find({}).limit(limit); // Optionally limit initial stock fetch for performance
+  // Get all stocks, not limited, so we can filter and sort properly
+  const allStocks = await Stock.find({}).sort({ symbol: 1 }); // Sort by symbol for consistent ordering
   const summaries = [];
 
   for (const stock of allStocks) {
@@ -180,8 +188,15 @@ const getTopNStocksSummary = async (limit = 10) => {
     }
   }
 
-  // You can add more sophisticated sorting here if needed, e.g., by highest volume, or biggest change
-  // For now, let's just return them as is, up to the limit.
+  // Sort by currentPrice (descending) to show most valuable stocks first, or by symbol if prices are equal
+  summaries.sort((a, b) => {
+    if (b.currentPrice !== a.currentPrice) {
+      return b.currentPrice - a.currentPrice;
+    }
+    return a.symbol.localeCompare(b.symbol);
+  });
+
+  // Return top N stocks
   return summaries.slice(0, limit);
 };
 
