@@ -16,6 +16,10 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [portfolioLoading, setPortfolioLoading] = useState(true);
   const [error, setError] = useState("");
+  // New states for transactions
+  const [transactions, setTransactions] = useState([]);
+  const [transactionsLoading, setTransactionsLoading] = useState(true);
+  const [transactionsError, setTransactionsError] = useState("");
   
   // Sell modal state
   const [showSellModal, setShowSellModal] = useState(false);
@@ -62,6 +66,7 @@ const Dashboard = () => {
     fetchStocks();
     if (user) {
       fetchPortfolio();
+      fetchTransactions(); // Call fetchTransactions
     }
   }, [user]);
 
@@ -77,13 +82,28 @@ const Dashboard = () => {
   };
 
   const fetchPortfolio = async () => {
+    setPortfolioLoading(true); // Start loading before API call
     try {
       const response = await api.get("/portfolio");
-      setPortfolio(response.data);
+      setPortfolio(response.data.holdings || []); // Correctly set portfolio to the holdings array
     } catch (err) {
-      console.error("Failed to fetch portfolio:", err);
+      console.error("Failed to fetch portfolio for Dashboard:", err);
+      setError("Failed to load portfolio for Dashboard."); // Set an error message
     } finally {
       setPortfolioLoading(false);
+    }
+  };
+
+  const fetchTransactions = async () => {
+    setTransactionsLoading(true);
+    try {
+      const response = await api.get("/transactions");
+      setTransactions(response.data);
+    } catch (err) {
+      console.error("Failed to fetch transactions for Dashboard:", err);
+      setTransactionsError("Failed to load recent transactions.");
+    } finally {
+      setTransactionsLoading(false);
     }
   };
 
@@ -171,7 +191,7 @@ const Dashboard = () => {
             </div>
             {stocks.length > 0 ? (
               <div className="space-y-3">
-                {stocks.slice(0, 8).map((stock) => (
+                {stocks.map((stock) => (
                   <div
                     key={stock._id}
                     className={`flex justify-between items-center p-4 rounded-lg border transition-all duration-200 ${
@@ -201,7 +221,7 @@ const Dashboard = () => {
                           <div className={`font-bold transition-colors duration-300 ${
                             isDark ? 'text-white' : 'text-gray-900'
                           }`}>
-                            ${stock.currentPrice}
+                            {stock.currentPrice && stock.currentPrice > 0 ? `$${stock.currentPrice}` : 'N/A'}
                           </div>
                           <div className={`text-xs transition-colors duration-300 ${
                             isDark ? 'text-slate-400' : 'text-gray-600'
@@ -424,6 +444,70 @@ const Dashboard = () => {
                   }`}>Last 30 days</p>
                 </div>
               </div>
+              {transactionsLoading ? (
+                <div className="text-center py-8">
+                  <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
+                    isDark ? 'bg-green-500/20' : 'bg-green-100'
+                  }`}>
+                    <svg className={`w-8 h-8 animate-spin ${isDark ? 'text-green-400' : 'text-green-600'}`} fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  </div>
+                  <p className={`transition-colors duration-300 ${
+                    isDark ? 'text-slate-400' : 'text-gray-600'
+                  }`}>
+                    Loading transactions...
+                  </p>
+                </div>
+              ) : transactionsError ? (
+                <p className={`text-red-500 transition-colors duration-300 ${isDark ? 'text-red-400' : ''}`}>
+                  {transactionsError}
+                </p>
+              ) : transactions.length > 0 ? (
+                <div className="space-y-3">
+                  {transactions.slice(0, 5).map((transaction) => (
+                    <div
+                      key={transaction._id}
+                      className={`p-4 rounded-lg border flex justify-between items-center transition-all duration-200 ${
+                        isDark 
+                          ? 'bg-white/5 border-white/10 hover:border-white/20' 
+                          : 'bg-gray-50/80 border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <div>
+                        <div className={`font-bold transition-colors duration-300 ${
+                          isDark ? 'text-white' : 'text-gray-900'
+                        }`}>
+                          {transaction.type === 'BUY' ? 'Mua' : 'Bán'} {transaction.quantity} {transaction.stockSymbol}
+                        </div>
+                        <div className={`text-sm transition-colors duration-300 ${
+                          isDark ? 'text-slate-400' : 'text-gray-600'
+                        }`}>
+                          {new Date(transaction.createdAt).toLocaleString()}
+                        </div>
+                      </div>
+                      <div className={`font-bold ${
+                        transaction.type === 'BUY'
+                          ? isDark ? 'text-green-400' : 'text-green-600'
+                          : isDark ? 'text-red-400' : 'text-red-600'
+                      }`}>
+                        {transaction.type === 'BUY' ? '-' : '+'}${transaction.amount.toFixed(2)}
+                      </div>
+                    </div>
+                  ))}
+                  <Link 
+                    to="/orders" 
+                    className={`block text-center mt-4 px-4 py-2 rounded-lg font-medium transition-colors duration-300 ${
+                      isDark 
+                        ? 'bg-blue-600/20 text-blue-400 hover:bg-blue-600/30' 
+                        : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                    }`}
+                  >
+                    View All Transactions
+                  </Link>
+                </div>
+              ) : (
               <div className="text-center py-8">
                 <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
                   isDark ? 'bg-green-500/20' : 'bg-green-100'
@@ -445,9 +529,10 @@ const Dashboard = () => {
                 <p className={`transition-colors duration-300 ${
                   isDark ? 'text-slate-400' : 'text-gray-600'
                 }`}>
-                  Transaction history will be displayed here
+                    No recent transactions.
                 </p>
               </div>
+              )}
             </div>
           </div>
         </div>

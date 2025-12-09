@@ -148,6 +148,21 @@ function ReviewArticlePage() {
     }
   };
 
+  const handleDeleteArticle = async () => {
+    if (!window.confirm(`Bạn có chắc chắn muốn xóa bài viết "${article.title}"? Hành động này không thể hoàn tác.`)) {
+      return;
+    }
+
+    try {
+      await api.delete(`/editor/article/${id}`);
+      toast.success('Article deleted successfully');
+      navigate('/editor/dashboard');
+    } catch (err) {
+      console.error('Error deleting article:', err);
+      toast.error(err?.response?.data?.message || `Failed to delete article: ${err.message}`);
+    }
+  };
+
   if (loading) {
     return <div className="container mx-auto p-4 text-center text-gray-700 dark:text-gray-300">Loading article details...</div>;
   }
@@ -313,6 +328,13 @@ function ReviewArticlePage() {
                 </button>
               )}
             </div>
+            <br />
+            <button 
+              onClick={handleDeleteArticle} 
+              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-800 hover:bg-red-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+            >
+              Delete Article
+            </button>
           </div>
         </div>
       </div>

@@ -57,6 +57,12 @@ const Login = () => {
               <input id="password" name="password" type="password" required className="form-input" placeholder="Enter your password" value={formData.password} onChange={handleChange} />
             </div>
 
+            <div className="mb-4 text-right">
+              <Link to="/forgot-password" className="text-sm" style={{ color: 'var(--accent)' }}>
+                Forgot password?
+              </Link>
+            </div>
+
             <button type="submit" disabled={loading} className="btn btn-primary w-full">
               {loading ? 'Signing in...' : 'Sign in'}
             </button>

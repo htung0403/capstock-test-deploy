@@ -8,26 +8,15 @@
 */
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
-import {
-  ComposedChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  CartesianGrid,
-  Area,
-  ReferenceLine,
-  Bar,
-} from "recharts";
 import api from "../services/api";
 import { useTheme } from "../contexts/ThemeContext";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../components/Toast";
 import SellModal from "../components/SellModal";
 import BuyModal from "../components/BuyModal";
-import OrderForm from "../components/OrderForm"; // Import the new OrderForm
-import AIChatWidget from "../components/AIChatWidget"; // Import the AI Chat Widget
+import OrderForm from "../components/OrderForm";
+import AIChatWidget from "../components/AIChatWidget";
+import StockChart from "../components/StockChart";
 
 const TIMEFRAMES = [
   { key: "1D", label: "1D", ms: 1 * 24 * 60 * 60 * 1000 },
@@ -48,158 +37,6 @@ function formatCurrency(n) {
   }).format(n);
 }
 
-function formatXAxisLabel(isoStr, timeframeKey) {
-  const d = new Date(isoStr);
-  if (timeframeKey === "1D" || timeframeKey === "5D") {
-    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  }
-  return d.toLocaleDateString();
-}
-
-function CustomTooltip({ active, payload, label, isDark }) {
-  if (!active || !payload || !payload.length) return null;
-  const p = payload[0]?.payload;
-  return (
-    <div
-      className={`px-3 py-2 rounded-lg shadow-2xl border ${
-        isDark
-          ? "bg-slate-900/95 text-slate-200 border-slate-400/20"
-          : "bg-white/95 text-slate-800 border-slate-300/50"
-      }`}
-    >
-      <div className="text-xs opacity-80 mb-1">{label}</div>
-      {p.open !== undefined ? (
-        <>
-          <div className="text-xs">
-            <span className="opacity-70">Open:</span>{" "}
-            <span className="font-bold">{formatCurrency(p.open)}</span>
-          </div>
-          <div className="text-xs">
-            <span className="opacity-70">High:</span>{" "}
-            <span className="font-bold text-green-500">
-              {formatCurrency(p.high)}
-            </span>
-          </div>
-          <div className="text-xs">
-            <span className="opacity-70">Low:</span>{" "}
-            <span className="font-bold text-red-500">
-              {formatCurrency(p.low)}
-            </span>
-          </div>
-          <div className="text-xs">
-            <span className="opacity-70">Close:</span>{" "}
-            <span className="font-bold text-cyan-500">
-              {formatCurrency(p.close)}
-            </span>
-          </div>
-          <div className="text-xs opacity-85 mt-1">
-            Vol: {p.volume?.toLocaleString?.() || p.volume}
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="font-extrabold text-cyan-500">
-            {formatCurrency(p.price)}
-          </div>
-          <div className="text-xs opacity-85">
-            Vol: {p.volume?.toLocaleString?.() || p.volume}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-// Custom Candlestick Shape Component
-const Candlestick = (props) => {
-  const { x, y, width, height, payload } = props;
-
-  if (
-    !payload ||
-    typeof payload.open !== "number" ||
-    typeof payload.close !== "number" ||
-    typeof payload.high !== "number" ||
-    typeof payload.low !== "number"
-  ) {
-    return null;
-  }
-
-  const { open, close, high, low } = payload;
-
-  // Validate data
-  if (high < low || high < open || high < close || low > open || low > close) {
-    console.warn("Invalid OHLC data:", payload);
-    return null;
-  }
-
-  const isGrowing = close >= open;
-  const color = isGrowing ? "#10b981" : "#ef4444"; // green-500 : red-500
-
-  // Bar component gives us y at the 'high' value and height from low to high
-  // So: y = pixel position of 'high', y + height = pixel position of 'low'
-  const range = high - low;
-  if (range <= 0) {
-    // Flat candle (all prices same)
-    const wickX = x + width / 2;
-    return (
-      <g>
-        <line
-          x1={wickX}
-          y1={y}
-          x2={wickX}
-          y2={y + height}
-          stroke={color}
-          strokeWidth={1.5}
-        />
-        <rect
-          x={x + 1}
-          y={y}
-          width={Math.max(width - 2, 1)}
-          height={2}
-          fill={color}
-        />
-      </g>
-    );
-  }
-
-  // Calculate body positions as ratios
-  const openFromHigh = high - open;
-  const closeFromHigh = high - close;
-
-  const yOpen = y + (openFromHigh / range) * height;
-  const yClose = y + (closeFromHigh / range) * height;
-
-  const bodyTop = Math.min(yOpen, yClose);
-  const bodyBottom = Math.max(yOpen, yClose);
-  const bodyHeight = Math.max(bodyBottom - bodyTop, 1);
-
-  const wickX = x + width / 2;
-
-  return (
-    <g>
-      {/* Wick (High-Low line) */}
-      <line
-        x1={wickX}
-        y1={y}
-        x2={wickX}
-        y2={y + height}
-        stroke={color}
-        strokeWidth={1.5}
-      />
-      {/* Body (Open-Close rectangle) */}
-      <rect
-        x={x + 1}
-        y={bodyTop}
-        width={Math.max(width - 2, 1)}
-        height={bodyHeight}
-        fill={color}
-        stroke={color}
-        strokeWidth={1}
-        fillOpacity={isGrowing ? 0.8 : 1}
-      />
-    </g>
-  );
-};
 
 export default function StockDetail() {
   const { symbol } = useParams();
@@ -213,17 +50,11 @@ export default function StockDetail() {
   const [chartType, setChartType] = useState("candlestick"); // 'candlestick' | 'line'
   const [refreshing, setRefreshing] = useState(false);
 
-  // Zoom state
-  const [zoomDomain, setZoomDomain] = useState({ start: 0, end: 100 }); // percentage
-  const [isZooming, setIsZooming] = useState(false);
-
-  // Calculate zoom percentage (100% = no zoom, lower = more zoomed in)
-  const zoomPercentage = zoomDomain.end - zoomDomain.start;
-
   // AI Analysis state
   const [aiAnalysis, setAiAnalysis] = useState(null);
   const [loadingAIAnalysis, setLoadingAIAnalysis] = useState(false);
   const [aiAnalysisError, setAiAnalysisError] = useState("");
+
 
   // Order form state
   const [showOrderForm, setShowOrderForm] = useState(false);
@@ -269,9 +100,11 @@ export default function StockDetail() {
 
     try {
       const response = await api.get("/portfolio");
-      const holding = response.data.find(
-        (h) => h.stock.symbol === symbol.toUpperCase()
-      );
+      // Portfolio response has holdings array
+      const holdings = response.data?.holdings || response.data || [];
+      const holding = Array.isArray(holdings) 
+        ? holdings.find((h) => h.stock?.symbol === symbol.toUpperCase())
+        : null;
       setUserHolding(holding || null);
     } catch (error) {
       console.error("Error fetching user holding:", error);
@@ -300,8 +133,23 @@ export default function StockDetail() {
     setLoadingAIAnalysis(true);
     setAiAnalysisError("");
     try {
-      const res = await api.get(`/ai/analysis/${symbol}`);
-      setAiAnalysis(res.data.analysis);
+      // Use hybrid analysis instead of comprehensive analysis (better technical indicators)
+      const res = await api.get(`/ai/hybrid-analysis/${symbol}`);
+      // Transform hybrid analysis result to match existing UI structure
+      const hybridData = res.data.hybrid_analysis;
+      setAiAnalysis({
+        sentiment: hybridData.sentiment_label,
+        price_trends: {
+          short_term_trend: hybridData.technical_signal,
+          long_term_trend: hybridData.technical_signal, // Use technical signal for both
+          ma_short: hybridData.ema_20,
+          ma_long: null, // EMA instead of SMA
+        },
+        profit_potential: hybridData.final_signal === "Buy" ? "High" : hybridData.final_signal === "Sell" ? "Low" : "Moderate",
+        risk_level: hybridData.confidence === "High" ? "Low to Moderate" : hybridData.confidence === "Medium" ? "Moderate" : "Moderate to High",
+        // Additional hybrid analysis fields
+        hybrid_analysis: hybridData, // Keep full hybrid data for detailed display
+      });
       show("success", `AI analysis for ${symbol} completed.`);
     } catch (e) {
       const errorMessage = e?.response?.data?.message || e.message;
@@ -311,6 +159,7 @@ export default function StockDetail() {
       setLoadingAIAnalysis(false);
     }
   }, [symbol, show]);
+
 
   const handleSellSuccess = () => {
     // Refresh user data and portfolio after selling
@@ -371,53 +220,7 @@ export default function StockDetail() {
     changePct,
   };
 
-  // Zoom functions
-  const handleZoomIn = () => {
-    const currentRange = zoomDomain.end - zoomDomain.start;
-    const zoomFactor = 0.8; // Zoom in by 20%
-    const newRange = currentRange * zoomFactor;
-    const center = (zoomDomain.start + zoomDomain.end) / 2;
-    const newStart = Math.max(0, center - newRange / 2);
-    const newEnd = Math.min(100, center + newRange / 2);
-    setZoomDomain({ start: newStart, end: newEnd });
-  };
-
-  const handleZoomOut = () => {
-    const currentRange = zoomDomain.end - zoomDomain.start;
-    if (currentRange >= 100) return; // Already at max zoom out
-    const zoomFactor = 1.25; // Zoom out by 25%
-    const newRange = Math.min(100, currentRange * zoomFactor);
-    const center = (zoomDomain.start + zoomDomain.end) / 2;
-    let newStart = center - newRange / 2;
-    let newEnd = center + newRange / 2;
-
-    // Adjust if out of bounds
-    if (newStart < 0) {
-      newEnd = Math.min(100, newEnd - newStart);
-      newStart = 0;
-    }
-    if (newEnd > 100) {
-      newStart = Math.max(0, newStart - (newEnd - 100));
-      newEnd = 100;
-    }
-
-    setZoomDomain({ start: newStart, end: newEnd });
-  };
-
-  const handleResetZoom = () => {
-    setZoomDomain({ start: 0, end: 100 });
-  };
-
-  // Theme-aware colors
-  const chartColors = {
-    accent: "#06b6d4", // cyan-500
-    accentSoft: "#22d3ee", // cyan-400
-    grid: isDark ? "rgba(148,163,184,0.2)" : "rgba(148,163,184,0.35)",
-    text: isDark ? "rgba(226,232,240,0.85)" : "rgba(30,41,59,0.85)",
-    cursor: isDark ? "rgba(34,211,238,0.55)" : "rgba(14,165,233,0.55)",
-    referenceLine: isDark ? "rgba(148,163,184,0.4)" : "rgba(148,163,184,0.6)",
-  };
-
+  // Prepare chart data for lightweight-charts
   const chartData = useMemo(() => {
     return (history || []).map((h) => ({
       time: new Date(h.timestamp).toISOString(),
@@ -426,72 +229,9 @@ export default function StockDetail() {
       high: h.high || h.price,
       low: h.low || h.price,
       close: h.close || h.price,
-      volume: h.volume,
+      volume: h.volume || 0,
     }));
   }, [history]);
-
-  // Zoomed chart data based on zoomDomain
-  const zoomedChartData = useMemo(() => {
-    if (!chartData.length) return [];
-
-    const startIdx = Math.floor((zoomDomain.start / 100) * chartData.length);
-    const endIdx = Math.ceil((zoomDomain.end / 100) * chartData.length);
-
-    return chartData.slice(startIdx, endIdx);
-  }, [chartData, zoomDomain]);
-
-  // Handle zoom with Ctrl + wheel
-  const handleWheel = useCallback((e) => {
-    if (!e.ctrlKey && !e.metaKey) return; // Only zoom when Ctrl/Cmd is pressed
-
-    e.preventDefault();
-
-    const delta = e.deltaY;
-    const zoomFactor = 0.1; // 10% zoom per scroll
-
-    setZoomDomain((prev) => {
-      const currentRange = prev.end - prev.start;
-      const zoomAmount = currentRange * zoomFactor * (delta > 0 ? 1 : -1);
-
-      let newStart = prev.start + zoomAmount / 2;
-      let newEnd = prev.end - zoomAmount / 2;
-
-      // Ensure minimum zoom level (at least 5% of data visible)
-      if (newEnd - newStart < 5) {
-        const center = (prev.start + prev.end) / 2;
-        newStart = center - 2.5;
-        newEnd = center + 2.5;
-      }
-
-      // Ensure maximum zoom level (100% of data)
-      if (newStart < 0) {
-        newEnd = newEnd - newStart;
-        newStart = 0;
-      }
-      if (newEnd > 100) {
-        newStart = newStart - (newEnd - 100);
-        newEnd = 100;
-      }
-
-      // Clamp values
-      newStart = Math.max(0, newStart);
-      newEnd = Math.min(100, newEnd);
-
-      return { start: newStart, end: newEnd };
-    });
-  }, []);
-
-  // Attach wheel event listener
-  useEffect(() => {
-    const chartContainer = document.getElementById("stock-chart-container");
-    if (!chartContainer) return;
-
-    chartContainer.addEventListener("wheel", handleWheel, { passive: false });
-
-    return () => {
-      chartContainer.removeEventListener("wheel", handleWheel);
-    };
-  }, [handleWheel]);
 
   return (
     <div className="container px-4 pb-8 pt-4">
@@ -534,13 +274,16 @@ export default function StockDetail() {
         </div>
 
         {/* Toolbar */}
-        <div className="flex items-center justify-between px-3 pb-3">
-          <div className="flex gap-2 flex-wrap">
+        <div className="flex items-center justify-between px-3 pb-3 flex-wrap gap-3">
+          {/* Time Range Segmented Control */}
+          <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
             {TIMEFRAMES.map((tf) => (
               <button
                 key={tf.key}
-                className={`btn ${
-                  timeframe === tf.key ? "btn-primary" : "btn-outline"
+                className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                  timeframe === tf.key
+                    ? "bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm"
+                    : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
                 }`}
                 onClick={() => setTimeframe(tf.key)}
               >
@@ -548,58 +291,49 @@ export default function StockDetail() {
               </button>
             ))}
           </div>
-          <div className="flex gap-2 items-center">
-            {/* Zoom Controls */}
-            <div className="flex items-center gap-2 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 bg-white dark:bg-gray-800">
-              <button
-                className="text-lg font-bold text-gray-700 dark:text-gray-300 hover:text-cyan-500 dark:hover:text-cyan-400 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                onClick={handleZoomOut}
-                disabled={zoomPercentage >= 100}
-                title="Zoom out (Ctrl + Scroll down)"
-              >
-                −
-              </button>
-              <span className="text-sm font-semibold text-gray-700 dark:text-gray-300 min-w-[60px] text-center">
-                {zoomPercentage.toFixed(0)}%
-              </span>
-              <button
-                className="text-lg font-bold text-gray-700 dark:text-gray-300 hover:text-cyan-500 dark:hover:text-cyan-400 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                onClick={handleZoomIn}
-                disabled={zoomPercentage <= 10}
-                title="Zoom in (Ctrl + Scroll up)"
-              >
-                +
-              </button>
-            </div>
 
-            {/* Chart Type Buttons */}
+          {/* Chart Type Segmented Control */}
+          <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1 flex-wrap">
             <button
-              className={`btn ${
-                chartType === "candlestick" ? "btn-primary" : "btn-outline"
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                chartType === "candlestick"
+                  ? "bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm"
+                  : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
               }`}
               onClick={() => setChartType("candlestick")}
             >
               🕯️ Candlestick
             </button>
             <button
-              className={`btn ${
-                chartType === "line" ? "btn-primary" : "btn-outline"
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                chartType === "line"
+                  ? "bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm"
+                  : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
               }`}
               onClick={() => setChartType("line")}
             >
               📈 Line
             </button>
-
-            {/* Reset Zoom Button */}
-            {(zoomDomain.start !== 0 || zoomDomain.end !== 100) && (
-              <button
-                className="btn btn-outline"
-                onClick={handleResetZoom}
-                title="Reset zoom"
-              >
-                🔍 Reset
-              </button>
-            )}
+            <button
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                chartType === "baseline"
+                  ? "bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm"
+                  : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+              }`}
+              onClick={() => setChartType("baseline")}
+            >
+              📊 Baseline
+            </button>
+            <button
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                chartType === "histogram"
+                  ? "bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm"
+                  : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+              }`}
+              onClick={() => setChartType("histogram")}
+            >
+              📉 Histogram
+            </button>
           </div>
         </div>
 
@@ -612,120 +346,32 @@ export default function StockDetail() {
                 : "bg-blue-100 text-blue-700"
             }`}
           >
-            💡 <strong>Tip:</strong> Giữ Ctrl (hoặc Cmd) và cuộn chuột để zoom
-            in/out
-            {(zoomDomain.start !== 0 || zoomDomain.end !== 100) && (
-              <span className="ml-2">
-                - Đang xem: {Math.round(zoomDomain.start)}% →{" "}
-                {Math.round(zoomDomain.end)}%
-              </span>
-            )}
+            💡 <strong>Tip:</strong> Giữ Ctrl (hoặc Cmd) và cuộn chuột để zoom in/out
           </div>
         </div>
 
         {/* Chart */}
-        <div
-          id="stock-chart-container"
-          className={`w-full h-[460px] border-t transition-colors duration-200 ${
-            isDark
-              ? "bg-slate-900/50 border-slate-700/30"
-              : "bg-white border-slate-200/50"
-          }`}
-        >
+        <div className="w-full h-[460px] border-t bg-white">
           {loading ? (
-            <div className="flex items-center justify-center h-full text-slate-600 dark:text-slate-400">
+            <div className="flex items-center justify-center h-full text-gray-600 dark:text-gray-400">
               Loading chart...
             </div>
           ) : error ? (
             <div className="flex items-center justify-center h-full text-red-600 dark:text-red-400">
               {error}
             </div>
+          ) : chartData.length === 0 ? (
+            <div className="flex items-center justify-center h-full text-gray-600 dark:text-gray-400">
+              No data available
+            </div>
           ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart
-                data={zoomedChartData}
-                margin={{ top: 10, right: 20, left: 0, bottom: 10 }}
-                barCategoryGap="20%"
-              >
-                <defs>
-                  <linearGradient
-                    id="priceGradient"
-                    x1="0"
-                    y1="0"
-                    x2="0"
-                    y2="1"
-                  >
-                    <stop
-                      offset="0%"
-                      stopColor={chartColors.accent}
-                      stopOpacity={isDark ? 0.25 : 0.35}
-                    />
-                    <stop
-                      offset="100%"
-                      stopColor={chartColors.accent}
-                      stopOpacity={0}
-                    />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke={chartColors.grid}
-                />
-                <XAxis
-                  dataKey="time"
-                  tick={{ fontSize: 12, fill: chartColors.text }}
-                  minTickGap={24}
-                  tickFormatter={(value) => formatXAxisLabel(value, timeframe)}
-                  axisLine={{ stroke: chartColors.grid }}
-                  tickLine={{ stroke: chartColors.grid }}
-                />
-                <YAxis
-                  domain={["auto", "auto"]}
-                  tick={{ fontSize: 12, fill: chartColors.text }}
-                  tickFormatter={(v) => formatCurrency(v)}
-                  axisLine={{ stroke: chartColors.grid }}
-                  tickLine={{ stroke: chartColors.grid }}
-                />
-                <Tooltip
-                  content={<CustomTooltip isDark={isDark} />}
-                  labelFormatter={(v) => formatXAxisLabel(v, timeframe)}
-                  cursor={{ stroke: chartColors.cursor, strokeWidth: 1 }}
-                />
-                {first && (
-                  <ReferenceLine
-                    y={first.price}
-                    stroke={chartColors.referenceLine}
-                    strokeDasharray="3 3"
-                  />
-                )}
-                {chartType === "candlestick" && (
-                  <Bar
-                    dataKey="high"
-                    shape={(props) => (
-                      <Candlestick {...props} payload={props.payload} />
-                    )}
-                    isAnimationActive={false}
-                  />
-                )}
-                {chartType === "line" && (
-                  <Line
-                    type="monotone"
-                    dataKey="close"
-                    stroke={chartColors.accent}
-                    dot={false}
-                    strokeWidth={2.25}
-                    activeDot={{
-                      r: 3,
-                      stroke: chartColors.accentSoft,
-                      strokeWidth: 2,
-                      fill: isDark
-                        ? chartColors.accentSoft
-                        : chartColors.accent,
-                    }}
-                  />
-                )}
-              </ComposedChart>
-            </ResponsiveContainer>
+            <StockChart
+              mode={chartType}
+              data={chartData}
+              selectedRange={timeframe}
+              onRangeChange={setTimeframe}
+              onModeChange={setChartType}
+            />
           )}
         </div>
       </div>
@@ -862,16 +508,74 @@ export default function StockDetail() {
                 {aiAnalysis.risk_level}
               </span>
             </p>
+            {/* Enhanced display with hybrid analysis details if available */}
+            {aiAnalysis.hybrid_analysis && (
+              <>
+                {/* Confidence Warning */}
+                {aiAnalysis.hybrid_analysis.confidence_warning && (
+                  <div className="bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-400 dark:border-yellow-600 rounded-lg p-3 mb-3">
+                    <p className="text-yellow-800 dark:text-yellow-200 text-sm font-semibold">
+                      ⚠️ {aiAnalysis.hybrid_analysis.confidence_warning}
+                    </p>
+                  </div>
+                )}
+
+                {/* Technical Indicators */}
+                <div className="border-t dark:border-gray-700 pt-3 mt-3">
+                  <h4 className="font-bold text-sm mb-2 text-gray-600 dark:text-gray-400">📊 Technical Indicators</h4>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <strong>EMA (20):</strong>{" "}
+                      <span className="font-semibold text-cyan-500">
+                        {aiAnalysis.hybrid_analysis.ema_20 ? formatCurrency(aiAnalysis.hybrid_analysis.ema_20) : "N/A"}
+                      </span>
+                    </div>
+                    <div>
+                      <strong>RSI (14):</strong>{" "}
+                      <span className={`font-semibold ${
+                        aiAnalysis.hybrid_analysis.rsi_14 > 70 ? "text-red-500" :
+                        aiAnalysis.hybrid_analysis.rsi_14 < 30 ? "text-green-500" :
+                        "text-yellow-500"
+                      }`}>
+                        {aiAnalysis.hybrid_analysis.rsi_14 ? aiAnalysis.hybrid_analysis.rsi_14.toFixed(2) : "N/A"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Final Signal with Confidence */}
+                <div className="border-t dark:border-gray-700 pt-3 mt-3">
+                  <p>
+                    <strong>Final Signal:</strong>{" "}
+                    <span
+                      className={`font-bold text-lg ${
+                        aiAnalysis.hybrid_analysis.final_signal === "Buy"
+                          ? "text-green-600"
+                          : aiAnalysis.hybrid_analysis.final_signal === "Sell"
+                          ? "text-red-600"
+                          : "text-yellow-600"
+                      }`}
+                    >
+                      {aiAnalysis.hybrid_analysis.final_signal}
+                    </span>
+                    {" "}
+                    <span className="text-sm text-gray-500 dark:text-gray-400">
+                      (Confidence: {aiAnalysis.hybrid_analysis.confidence})
+                    </span>
+                  </p>
+                  {aiAnalysis.hybrid_analysis.explanation && (
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-2 italic">
+                      {aiAnalysis.hybrid_analysis.explanation}
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
+
             {aiAnalysis.price_trends.ma_short && (
               <p>
-                <strong>MA (10 days):</strong>{" "}
+                <strong>EMA (20 days):</strong>{" "}
                 {formatCurrency(aiAnalysis.price_trends.ma_short)}
-              </p>
-            )}
-            {aiAnalysis.price_trends.ma_long && (
-              <p>
-                <strong>MA (50 days):</strong>{" "}
-                {formatCurrency(aiAnalysis.price_trends.ma_long)}
               </p>
             )}
           </div>
@@ -879,7 +583,7 @@ export default function StockDetail() {
           !loadingAIAnalysis &&
           !aiAnalysisError && (
             <div className="p-4 text-slate-600 dark:text-slate-400">
-              Click "Analyze with AI" to get a comprehensive analysis for{" "}
+              Click "Analyze with AI" to get a comprehensive hybrid analysis (Technical Indicators + Sentiment) for{" "}
               {symbol}.
             </div>
           )

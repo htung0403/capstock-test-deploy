@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import api from '../services/api'; // Import the API service
 
 const Profile = () => {
   const { user, logout } = useAuth();
@@ -13,6 +14,29 @@ const Profile = () => {
     newPassword: '',
     confirmPassword: ''
   });
+  const [portfolioData, setPortfolioData] = useState(null);
+  const [loadingPortfolio, setLoadingPortfolio] = useState(true);
+  const [portfolioError, setPortfolioError] = useState(null);
+
+  useEffect(() => {
+    const fetchPortfolio = async () => {
+      if (!user) {
+        setLoadingPortfolio(false);
+        return;
+      }
+      try {
+        const response = await api.get('/portfolio');
+        setPortfolioData(response.data);
+      } catch (err) {
+        console.error('Error fetching portfolio for profile:', err);
+        setPortfolioError('Failed to load portfolio data.');
+      } finally {
+        setLoadingPortfolio(false);
+      }
+    };
+
+    fetchPortfolio();
+  }, [user]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -39,6 +63,34 @@ const Profile = () => {
     });
     setIsEditing(false);
   };
+
+  // Calculate total holdings and total profit
+  const totalHoldingsQuantity = portfolioData?.holdings.reduce((sum, holding) => sum + holding.quantity, 0) || 0;
+  const totalCurrentValue = portfolioData?.holdings.reduce((sum, holding) => {
+    // Ensure stock and currentPrice exist before calculating
+    if (holding.stock && holding.stock.currentPrice) {
+      return sum + (holding.quantity * holding.stock.currentPrice);
+    }
+    return sum;
+  }, 0) || 0;
+
+  const totalInvested = portfolioData?.holdings.reduce((sum, holding) => {
+    return sum + (holding.quantity * holding.avgBuyPrice);
+  }, 0) || 0;
+
+  const totalProfit = totalCurrentValue - totalInvested;
+  const formattedTotalProfit = totalProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const profitColorClass = totalProfit >= 0 ? 'text-green-600' : 'text-red-600';
+  const profitSign = totalProfit >= 0 ? '+' : '';
+
+  if (!user) {
+    // Handle case where user is not logged in or loading
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-2xl text-center">
+        <p className="text-gray-600">Please log in to view your profile.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-2xl">
@@ -116,24 +168,34 @@ const Profile = () => {
           {/* Account Statistics */}
           <div>
             <h3 className="text-lg font-semibold mb-4 text-gray-900">Thống kê tài khoản</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <div className="text-2xl font-bold text-blue-600">
-                  {user?.balance?.toLocaleString() || 0}
+            {loadingPortfolio ? (
+              <p className="text-gray-600">Loading portfolio statistics...</p>
+            ) : portfolioError ? (
+              <p className="text-red-500">{portfolioError}</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <div className="text-2xl font-bold text-blue-600">
+                    {user?.balance?.toLocaleString() || 0}
+                  </div>
+                  <div className="text-sm text-gray-600">Số dư (VND)</div>
                 </div>
-                <div className="text-sm text-gray-600">Số dư (VND)</div>
+                
+                <div className={`p-4 rounded-lg ${totalProfit >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
+                  <div className={`text-2xl font-bold ${profitColorClass}`}>
+                    {profitSign}{formattedTotalProfit}
+                  </div>
+                  <div className="text-sm text-gray-600">Tổng lợi nhuận</div>
+                </div>
+                
+                <div className="bg-purple-50 p-4 rounded-lg">
+                  <div className="text-2xl font-bold text-purple-600">
+                    {totalHoldingsQuantity}
+                  </div>
+                  <div className="text-sm text-gray-600">Số cổ phiếu sở hữu</div>
+                </div>
               </div>
-              
-              <div className="bg-green-50 p-4 rounded-lg">
-                <div className="text-2xl font-bold text-green-600">0</div>
-                <div className="text-sm text-gray-600">Tổng lợi nhuận</div>
-              </div>
-              
-              <div className="bg-purple-50 p-4 rounded-lg">
-                <div className="text-2xl font-bold text-purple-600">0</div>
-                <div className="text-sm text-gray-600">Số cổ phiếu sở hữu</div>
-              </div>
-            </div>
+            )}
           </div>
 
           {/* Password Change */}
