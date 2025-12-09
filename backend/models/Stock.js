@@ -14,6 +14,7 @@ const StockSchema = new mongoose.Schema(
     low: Number,
     close: Number,
     volume: Number,
+    sector: { type: String, trim: true }, // New sector field
     updatedAt: { type: Date, default: Date.now },
   },
   { timestamps: false }

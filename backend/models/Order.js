@@ -45,7 +45,7 @@ const OrderSchema = new mongoose.Schema(
     // Order status
     status: { 
       type: String, 
-      enum: ['PENDING', 'TRIGGERED', 'PARTIAL', 'FILLED', 'CANCELLED', 'REJECTED', 'EXPIRED'], 
+      enum: ['PENDING', 'TRIGGERED', 'PARTIALLY_FILLED', 'FILLED', 'CANCELLED', 'REJECTED', 'EXPIRED'], 
       default: 'PENDING' 
     },
     
@@ -76,19 +76,19 @@ OrderSchema.virtual('remainingQuantity').get(function() {
 
 // Method to check if order is active
 OrderSchema.methods.isActive = function() {
-  return ['PENDING', 'TRIGGERED', 'PARTIAL'].includes(this.status);
+  return ['PENDING', 'TRIGGERED', 'PARTIALLY_FILLED'].includes(this.status);
 };
 
 // Method to check if order can be cancelled
 OrderSchema.methods.canBeCancelled = function() {
-  return ['PENDING', 'TRIGGERED', 'PARTIAL'].includes(this.status);
+  return ['PENDING', 'TRIGGERED', 'PARTIALLY_FILLED'].includes(this.status);
 };
 
 // Static method to get active orders for a stock
 OrderSchema.statics.getActiveOrders = function(stockSymbol, orderType = null) {
   const query = { 
     stockSymbol, 
-    status: { $in: ['PENDING', 'TRIGGERED', 'PARTIAL'] } 
+    status: { $in: ['PENDING', 'TRIGGERED', 'PARTIALLY_FILLED'] } 
   };
   if (orderType) {
     query.orderType = orderType;

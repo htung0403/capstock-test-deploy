@@ -78,7 +78,7 @@ const PaymentSchema = new mongoose.Schema(
 
 // Index để tìm kiếm nhanh
 PaymentSchema.index({ user: 1, status: 1 });
-PaymentSchema.index({ orderId: 1 });
+// Note: orderId already has unique: true, so no need for separate index
 PaymentSchema.index({ createdAt: -1 });
 
 // Virtual field để kiểm tra đã hết hạn chưa

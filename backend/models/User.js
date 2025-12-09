@@ -40,6 +40,28 @@ const UserSchema = new mongoose.Schema({
     enum: ["USER", "WRITER", "EDITOR", "ADMIN"],
     default: "USER",
   },
+  // Support multiple roles (for users who can be both WRITER and EDITOR)
+  roles: {
+    type: [String],
+    enum: ["USER", "WRITER", "EDITOR", "ADMIN"],
+    default: ["USER"],
+  },
+  isBanned: {
+    type: Boolean,
+    default: false,
+  },
+  lastLogin: {
+    type: Date,
+    default: null,
+  },
+  resetPasswordToken: {
+    type: String,
+    default: null,
+  },
+  resetPasswordExpires: {
+    type: Date,
+    default: null,
+  },
   balance: {
     type: Number,
     default: 0,
@@ -64,6 +86,23 @@ UserSchema.pre('save', async function (next) {
 
 UserSchema.pre('findOneAndUpdate', function(next) {
   this.set({ updatedAt: new Date() });
+  next();
+});
+
+// Sync roles array with role field for backward compatibility
+UserSchema.pre('save', function (next) {
+  // If roles is empty or not set, initialize from role
+  if (!this.roles || this.roles.length === 0) {
+    this.roles = this.role ? [this.role] : ['USER'];
+  }
+  // If role is set but not in roles, add it
+  if (this.role && !this.roles.includes(this.role)) {
+    this.roles.push(this.role);
+  }
+  // Ensure USER role is always present
+  if (!this.roles.includes('USER')) {
+    this.roles.push('USER');
+  }
   next();
 });
 

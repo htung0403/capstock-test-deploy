@@ -72,6 +72,36 @@ const articleSchema = new mongoose.Schema({
         default: "draft",
         required: false,
     },
+    reviewedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: false,
+    },
+    reviewedAt: {
+        type: Date,
+        required: false,
+    },
+    deleteRequest: {
+        requested: {
+            type: Boolean,
+            default: false,
+        },
+        requestedBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User',
+            required: false,
+        },
+        requestedAt: {
+            type: Date,
+            required: false,
+        },
+        reason: {
+            type: String,
+            trim: true,
+            maxlength: 500,
+            required: false,
+        },
+    },
     thumbnail: {
         type: String,
         trim: true,
@@ -87,6 +117,21 @@ const articleSchema = new mongoose.Schema({
         type: String,
         trim: true,
         maxlength: 2000,
+        required: false,
+    },
+    // MongoDB Atlas Vector Search: Store embedding vector (384 dimensions for all-MiniLM-L6-v2)
+    embedding: {
+        type: [Number],
+        required: false,
+        select: false, // Don't return by default (large array)
+    },
+    // Track if embedding has been generated
+    embeddingGenerated: {
+        type: Boolean,
+        default: false,
+    },
+    embeddingGeneratedAt: {
+        type: Date,
         required: false,
     },
 });
