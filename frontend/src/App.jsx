@@ -33,6 +33,11 @@ import EditorDashboard from "./pages/EditorDashboard"; // Import editor dashboar
 import ReviewArticlePage from "./pages/ReviewArticlePage"; // Import review article page
 import NewsPage from "./pages/NewsPage"; // Import NewsPage
 import ArticleDetailPage from "./pages/ArticleDetailPage"; // Import ArticleDetailPage
+import MarketHeatmapPage from "./pages/MarketHeatmapPage"; // Import MarketHeatmapPage
+import PortfolioAnalyticsPage from "./pages/PortfolioAnalyticsPage"; // Import PortfolioAnalyticsPage
+import UserManagementPage from "./pages/UserManagementPage"; // Import UserManagementPage
+import ForgotPasswordPage from "./pages/ForgotPasswordPage"; // Import ForgotPasswordPage
+import ResetPasswordPage from "./pages/ResetPasswordPage"; // Import ResetPasswordPage
 
 function App() {
   return (
@@ -45,6 +50,8 @@ function App() {
               <Routes>
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
+                <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                <Route path="/reset-password" element={<ResetPasswordPage />} />
                 {/* Protected Routes */}
                 <Route  
                   path="/dashboard"
@@ -129,6 +136,36 @@ function App() {
                   element={
                     <ProtectedRoute>
                       <ArticleDetailPage />
+                    </ProtectedRoute>
+                  }
+                />
+
+                {/* Market Heatmap Page Route */}
+                <Route
+                  path="/market-heatmap"
+                  element={
+                    <ProtectedRoute>
+                      <MarketHeatmapPage />
+                    </ProtectedRoute>
+                  }
+                />
+
+                {/* Portfolio Analytics Page Route */}
+                <Route
+                  path="/portfolio-analytics"
+                  element={
+                    <ProtectedRoute>
+                      <PortfolioAnalyticsPage />
+                    </ProtectedRoute>
+                  }
+                />
+
+                {/* Admin Routes */}
+                <Route
+                  path="/admin/users"
+                  element={
+                    <ProtectedRoute requireAdmin>
+                      <UserManagementPage />
                     </ProtectedRoute>
                   }
                 />
