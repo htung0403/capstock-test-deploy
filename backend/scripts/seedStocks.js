@@ -9,6 +9,7 @@ require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 const Stock = require('../models/Stock');
 
 const TICKERS = [
+  // Key 1 - Tech Giants
   { symbol: 'AAPL', name: 'Apple Inc.' },
   { symbol: 'MSFT', name: 'Microsoft Corporation' },
   { symbol: 'NVDA', name: 'NVIDIA Corporation' },
@@ -17,8 +18,26 @@ const TICKERS = [
   { symbol: 'META', name: 'Meta Platforms, Inc.' },
   { symbol: 'TSLA', name: 'Tesla, Inc.' },
   { symbol: 'NFLX', name: 'Netflix, Inc.' },
-  { symbol: 'IBM', name: 'International Business Machines Corporation' },
+  // Key 2 - Tech & Software
+  { symbol: 'AMD', name: 'Advanced Micro Devices, Inc.' },
+  { symbol: 'ADBE', name: 'Adobe Inc.' },
+  { symbol: 'CRM', name: 'Salesforce, Inc.' },
   { symbol: 'ORCL', name: 'Oracle Corporation' },
+  { symbol: 'INTC', name: 'Intel Corporation' },
+  { symbol: 'PYPL', name: 'PayPal Holdings, Inc.' },
+  { symbol: 'SHOP', name: 'Shopify Inc.' },
+  { symbol: 'UBER', name: 'Uber Technologies, Inc.' },
+  // Key 3 - Financial Services
+  { symbol: 'JPM', name: 'JPMorgan Chase & Co.' },
+  { symbol: 'BAC', name: 'Bank of America Corp.' },
+  { symbol: 'WFC', name: 'Wells Fargo & Company' },
+  { symbol: 'C', name: 'Citigroup Inc.' },
+  { symbol: 'GS', name: 'The Goldman Sachs Group, Inc.' },
+  { symbol: 'MS', name: 'Morgan Stanley' },
+  { symbol: 'V', name: 'Visa Inc.' },
+  { symbol: 'MA', name: 'Mastercard Incorporated' },
+  // Additional stocks
+  { symbol: 'IBM', name: 'International Business Machines Corporation' },
 ];
 
 async function run() {
