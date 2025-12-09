@@ -24,13 +24,19 @@ const chatbotRoutes = require('./routes/chatbotRoutes'); // Import the new chatb
 const paymentRoutes = require('./routes/paymentRoutes');
 const writerRoutes = require('./routes/writerRoutes'); // Import new writer routes
 const editorRoutes = require('./routes/editorRoutes'); // Import new editor routes
+const adminRoutes = require('./routes/adminRoutes'); // Import new admin routes
 const categoryRoutes = require('./routes/categoryRoutes'); // Import new category routes
 const tagRoutes = require('./routes/tagRoutes'); // Import new tag routes
 const marketRoutes = require('./routes/marketRoutes'); // Import new market routes
 const uploadRoutes = require('./routes/uploadRoutes'); // Import new upload routes
+const marketHeatmapRoutes = require('./routes/marketHeatmapRoutes'); // Import new market heatmap routes
+const watchlistRoutes = require('./routes/watchlistRoutes'); // Import new watchlist routes
+const trainingDataRoutes = require('./routes/trainingDataRoutes'); // Import training data routes
+const stockService = require('./services/stockService'); // Import stockService
 
 const app = express();
 const { startScheduler } = require('./scheduler/refreshScheduler');
+const { startModelRetrainScheduler } = require('./scheduler/modelRetrainScheduler');
 
 // Middlewares
 app.use(helmet());
@@ -50,10 +56,14 @@ app.use('/api/chatbot', chatbotRoutes); // Use the new chatbot routes
 app.use('/api/payments', paymentRoutes);
 app.use('/api/writer', writerRoutes); // Use new writer routes
 app.use('/api/editor', editorRoutes); // Use new editor routes
+app.use('/api/admin', adminRoutes); // Use new admin routes
 app.use('/api/categories', categoryRoutes); // Use new category routes
 app.use('/api/tags', tagRoutes); // Use new tag routes
 app.use('/api/market', marketRoutes); // Use new market routes
 app.use('/api/upload', uploadRoutes); // Use new upload routes
+app.use('/api/market-heatmap', marketHeatmapRoutes); // Use new market heatmap routes
+app.use('/api/watchlist', watchlistRoutes); // Use new watchlist routes
+app.use('/api/admin/training-data', trainingDataRoutes); // Use training data routes (admin only)
 
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
@@ -73,11 +83,18 @@ async function start() {
     await mongoose.connect(mongoUri, { dbName: process.env.MONGO_DB || undefined });
     // eslint-disable-next-line no-console
     console.log('MongoDB connected');
+
+    // Refresh stocks once on startup
+    console.log('Performing initial stock refresh on server startup...');
+    await stockService.refreshAllStocksData();
+    console.log('Initial stock refresh completed.');
+
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
-      // Start scheduler if enabled
+      // Start schedulers if enabled
       const baseUrl = process.env.BASE_URL || `http://localhost:${PORT}`;
       startScheduler(baseUrl);
+      startModelRetrainScheduler(); // Start model retraining scheduler
     });
   } catch (err) {
     // eslint-disable-next-line no-console
