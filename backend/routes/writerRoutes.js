@@ -19,5 +19,8 @@ router.get('/all-articles', authorize(['ADMIN']), writerController.getAllArticle
 router.get('/:authorId', writerController.getWriterArticles);
 router.get('/article/:id', writerController.getArticleById);
 router.put('/article/:id', writerController.updateArticle);
+router.post('/article/:id/submit', writerController.submitForReview); // Submit for review
+router.post('/article/:id/request-delete', writerController.requestDelete); // Request delete for published
+router.delete('/article/:id', writerController.deleteArticle); // Delete draft/pending/denied only
 
 module.exports = router;

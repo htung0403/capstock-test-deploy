@@ -44,6 +44,8 @@ const rateLimiter = (req, res, next) => {
     next();
 };
 
+const { protect } = require('../middlewares/authMiddleware');
+
 /*
   Route: POST /chat
   -----------------
@@ -52,5 +54,18 @@ const rateLimiter = (req, res, next) => {
   - `rateLimiter` is used to prevent accidental or malicious spam.
 */
 router.post('/chat', rateLimiter, chatbotController.chat);
+
+/*
+  Route: POST /chat-enhanced
+  ---------------------------
+  - Enhanced chat endpoint with AI orchestration (RAG + ML + LLM).
+  - Requires authentication (JWT token).
+  - Returns structured responses for rich UI rendering.
+  - Supports: price_forecast, sentiment, news_summary, portfolio_insight, general
+  
+  CHANGES (2025-12-06):
+  - Added enhanced endpoint for hybrid AI architecture
+*/
+router.post('/chat-enhanced', protect, rateLimiter, chatbotController.chatEnhanced);
 
 module.exports = router;

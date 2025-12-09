@@ -14,8 +14,12 @@ router.use(protect);
 router.use(authorize(['EDITOR', 'ADMIN']));
 
 router.get('/pending', editorController.getPendingArticles);
+router.get('/delete-requests', editorController.getDeleteRequests);
+router.get('/reviewed-by-me', editorController.getReviewedByMe);
 router.put('/approve/:id', editorController.approveArticle);
 router.put('/reject/:id', editorController.rejectArticle);
+router.post('/delete-request/:id/approve', editorController.approveDeleteRequest);
+router.post('/delete-request/:id/reject', editorController.rejectDeleteRequest);
 router.get('/article/:id', editorController.getArticleForEditor);
 router.put('/article/:id', editorController.editorUpdateArticle);
 
