@@ -35,13 +35,15 @@ const Navbar = () => {
   return (
     <nav className="navbar">
       <div className="container nav-inner">
-        <Link to="/" className="brand-mark">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <path d="M4 16L10 10L14 14L20 8" stroke="#22d3ee" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M4 4V20H20" stroke="#64748b" strokeWidth="2" strokeLinecap="round"/>
-          </svg>
-          <span>{t('app.brand')}</span>
-          <span className="badge">{t('app.beta')}</span>
+        <div className="flex items-center">
+          <Link to="/" className="brand-mark">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+              <path d="M4 16L10 10L14 14L20 8" stroke="#22d3ee" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M4 4V20H20" stroke="#64748b" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+            <span>{t('app.brand')}</span>
+            <span className="badge">{t('app.beta')}</span>
+          </Link>
           
           {/* News link next to brand mark */}
           {isAuthenticated && (
@@ -54,7 +56,29 @@ const Navbar = () => {
               News
             </Link>
           )}
-        </Link>
+          {/* Market Heatmap link next to News */}
+          {isAuthenticated && (
+            <Link
+              to="/market-heatmap"
+              className="ml-3 flex items-center text-sm font-medium transition-colors hover:text-cyan-400"
+              style={{ color: 'var(--text)' }}
+            >
+              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 9c1.657 0 3 .895 3 2s-1.343 2-3 2c-.628 0-1.213-.117-1.743-.323l-.15.011A3.5 3.5 0 005.15 15.15L3 21l6-3-3.5-3.5c.316-.271.666-.513 1.05-.722l-.001-.001A7.001 7.001 0 0118 10a7 7 0 01-2.343 5.657z"/></svg>
+              Heatmap
+            </Link>
+          )}
+          {/* Portfolio Analytics link next to Heatmap */}
+          {isAuthenticated && (
+            <Link
+              to="/portfolio-analytics"
+              className="ml-3 flex items-center text-sm font-medium transition-colors hover:text-cyan-400"
+              style={{ color: 'var(--text)' }}
+            >
+              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+              Portfolio
+            </Link>
+          )}
+        </div>
 
         {/* Original News link - now removed */}
         {/* {isAuthenticated && (
@@ -198,6 +222,7 @@ const Navbar = () => {
                       </>
                     {/* )*/}
 
+
                     <Link
                       to="/payments"
                       className="flex items-center gap-3 px-4 py-2 text-sm transition-colors"
@@ -239,6 +264,23 @@ const Navbar = () => {
                       </svg>
                       AI Chat
                     </Link>
+
+                    {/* Admin-only: User Management */}
+                    {(user?.role === 'ADMIN' || user?.roles?.includes('ADMIN')) && (
+                      <Link
+                        to="/admin/users"
+                        className="flex items-center gap-3 px-4 py-2 text-sm transition-colors"
+                        style={{ color: 'var(--text)' }}
+                        onMouseEnter={(e) => e.target.style.backgroundColor = 'rgba(148,163,184,0.1)'}
+                        onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                        onClick={() => setIsDropdownOpen(false)}
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                        </svg>
+                        User Management
+                      </Link>
+                    )}
 
                     <div className="border-t mt-1" style={{ borderColor: 'var(--border)' }}>
                       <button

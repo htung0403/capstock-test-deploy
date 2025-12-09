@@ -18,6 +18,8 @@ function ArticleForm({ articleId, onSave, initialData, authorId }) {
   const [symbol, setSymbol] = useState(initialData?.symbol || '');
   const [isPremium, setIsPremium] = useState(initialData?.isPremium || false);
   const [thumbnail, setThumbnail] = useState(initialData?.thumbnail || '');
+  const [articleStatus, setArticleStatus] = useState(initialData?.status || 'draft');
+  const [submitForReview, setSubmitForReview] = useState(false);
   
   const [categories, setCategories] = useState([]);
   const [allTags, setAllTags] = useState([]); // All available tags for selection
@@ -54,6 +56,7 @@ function ArticleForm({ articleId, onSave, initialData, authorId }) {
           setIsPremium(data.isPremium);
           setThumbnail(data.thumbnail || '');
           setThumbnailPreview(data.thumbnail || '');
+          setArticleStatus(data.status || 'draft');
         }
       } catch (err) {
         console.error("Error fetching form data:", err);
@@ -137,6 +140,7 @@ function ArticleForm({ articleId, onSave, initialData, authorId }) {
       symbol: symbol.toUpperCase(),
       isPremium,
       thumbnail,
+      submitForReview: submitForReview || (articleStatus === 'published' && articleId), // Auto-submit if published
     };
 
     const url = articleId ? `/writer/article/${articleId}` : '/writer'; // Removed /api
@@ -144,7 +148,10 @@ function ArticleForm({ articleId, onSave, initialData, authorId }) {
 
     try {
       const res = await api({ url, method, data: articleData });
-      alert(`Article ${articleId ? 'updated' : 'created'} successfully!`);
+      const message = articleStatus === 'published' && submitForReview 
+        ? 'Article updated and submitted for review!' 
+        : `Article ${articleId ? 'updated' : 'created'} successfully!`;
+      alert(message);
       onSave(res.data);
     } catch (err) {
       console.error(`Error ${articleId ? 'updating' : 'creating'} article:`, err);
@@ -389,6 +396,46 @@ function ArticleForm({ articleId, onSave, initialData, authorId }) {
           darkMode ? 'text-gray-200' : 'text-gray-900'
         }`}>Premium Article</label>
       </div>
+      {articleId && articleStatus === 'published' && (
+        <div className={`flex items-center p-4 rounded-md border transition-colors duration-200 ${
+          darkMode
+            ? 'bg-yellow-900/20 border-yellow-700'
+            : 'bg-yellow-50 border-yellow-200'
+        }`}>
+          <input 
+            type="checkbox" 
+            id="submitForReview" 
+            checked={submitForReview} 
+            onChange={(e) => setSubmitForReview(e.target.checked)} 
+            className="h-4 w-4 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:ring-offset-0 cursor-pointer transition-colors duration-200"
+          />
+          <label htmlFor="submitForReview" className={`ml-3 block text-sm font-semibold cursor-pointer ${
+            darkMode ? 'text-yellow-200' : 'text-yellow-800'
+          }`}>
+            Save & Submit for Review (changes will go back to editor review)
+          </label>
+        </div>
+      )}
+      {(articleId && (articleStatus === 'draft' || articleStatus === 'denied')) && (
+        <div className={`flex items-center p-4 rounded-md border transition-colors duration-200 ${
+          darkMode
+            ? 'bg-blue-900/20 border-blue-700'
+            : 'bg-blue-50 border-blue-200'
+        }`}>
+          <input 
+            type="checkbox" 
+            id="submitForReviewDraft" 
+            checked={submitForReview} 
+            onChange={(e) => setSubmitForReview(e.target.checked)} 
+            className="h-4 w-4 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:ring-offset-0 cursor-pointer transition-colors duration-200"
+          />
+          <label htmlFor="submitForReviewDraft" className={`ml-3 block text-sm font-semibold cursor-pointer ${
+            darkMode ? 'text-blue-200' : 'text-blue-800'
+          }`}>
+            Submit for Review after saving
+          </label>
+        </div>
+      )}
       <button 
         type="submit" 
         className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-md shadow-md text-sm font-semibold text-white bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-blue-400 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"

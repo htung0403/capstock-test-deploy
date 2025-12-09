@@ -19,6 +19,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import api from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
+import ChatMessage from './ChatMessage';
 
 function AIChatWidget({ stockSymbol }) {
   // -------------------------------
@@ -71,14 +72,47 @@ function AIChatWidget({ stockSymbol }) {
       setLoading(true);
 
       try {
-        // Call backend → backend handles auto language detection
-        const res = await api.post('/chatbot/chat', {
-          message: text,
-          context: contextPrompt
-        });
+        // Try enhanced endpoint first (with structured responses)
+        let aiResponse;
+        try {
+          const res = await api.post('/chatbot/chat-enhanced', {
+            message: text,
+            context: {
+              stockSymbol: stockSymbol || null
+            }
+          });
+          
+          if (res.data.success && res.data.response) {
+            // Structured response
+            aiResponse = {
+              sender: 'ai',
+              type: res.data.response.type,
+              text: res.data.response.text,
+              data: res.data.response.data
+            };
+          } else {
+            // Fallback response
+            aiResponse = {
+              sender: 'ai',
+              type: 'general',
+              text: res.data.fallback?.text || res.data.error?.message || 'Unable to process request.'
+            };
+          }
+        } catch (enhancedError) {
+          console.warn('[AIChatWidget] Enhanced endpoint failed, falling back to simple chat:', enhancedError);
+          // Fallback to simple chat endpoint
+          const res = await api.post('/chatbot/chat', {
+            message: text,
+            context: contextPrompt
+          });
+          aiResponse = {
+            sender: 'ai',
+            type: 'general',
+            text: res.data.response
+          };
+        }
 
         // Add AI bubble
-        const aiResponse = { sender: 'ai', text: res.data.response };
         setMessages((prev) => [...prev, aiResponse]);
 
       } catch (error) {
@@ -154,19 +188,17 @@ function AIChatWidget({ stockSymbol }) {
         {/* Chat Bubbles */}
         {messages.map((msg, index) => (
           <div key={index} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div
-              className={`max-w-[75%] p-2 rounded-lg shadow-sm text-sm whitespace-pre-line break-words ${
-                msg.sender === 'user'
-                  ? isDark
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-blue-500 text-white'
-                  : isDark
-                  ? 'bg-gray-700 text-white'
-                  : 'bg-gray-200 text-gray-800'
-              }`}
-            >
-              {msg.text}
-            </div>
+            {msg.sender === 'user' ? (
+              <div
+                className={`max-w-[75%] p-2 rounded-lg shadow-sm text-sm whitespace-pre-line break-words ${
+                  isDark ? 'bg-blue-600 text-white' : 'bg-blue-500 text-white'
+                }`}
+              >
+                {msg.text}
+              </div>
+            ) : (
+              <ChatMessage message={msg} />
+            )}
           </div>
         ))}
 
