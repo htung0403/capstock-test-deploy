@@ -49,18 +49,41 @@ const getPreviousClose = (stockHistory) => {
   }
 
   const latestTimestamp = new Date(stockHistory[stockHistory.length - 1].timestamp);
+  const latestDate = new Date(latestTimestamp.getFullYear(), latestTimestamp.getMonth(), latestTimestamp.getDate());
 
   // Find the last entry from a different day than the latest entry
+  let previousDayClose = null;
+  let previousDayDate = null;
+
   for (let i = stockHistory.length - 2; i >= 0; i--) {
     const currentEntryTimestamp = new Date(stockHistory[i].timestamp);
+    const currentDate = new Date(currentEntryTimestamp.getFullYear(), currentEntryTimestamp.getMonth(), currentEntryTimestamp.getDate());
+    
     // Compare dates only, ignoring time
-    if (currentEntryTimestamp.toDateString() !== latestTimestamp.toDateString()) {
-      console.log('Helper: Found previous day close:', stockHistory[i].close || stockHistory[i].price, 'for timestamp:', stockHistory[i].timestamp);
-      return stockHistory[i].close || stockHistory[i].price; // Return close or price of the previous day
+    if (currentDate.getTime() !== latestDate.getTime()) {
+      // Found a different day
+      if (!previousDayDate || currentDate.getTime() > previousDayDate.getTime()) {
+        // This is the most recent different day, or the first different day we've found
+        previousDayDate = currentDate;
+        previousDayClose = stockHistory[i].close || stockHistory[i].price;
+        console.log('Helper: Found previous day close:', previousDayClose, 'for date:', currentDate.toISOString().split('T')[0]);
+      }
     }
   }
-  console.log('Helper: No previous day close found.');
-  return null;
+
+  if (previousDayClose === null) {
+    console.log('Helper: No previous day close found. All entries are from the same day.');
+    // Fallback: If all entries are from the same day, try to use the first entry's close/price as "previous close"
+    // This handles the case where we only have intraday data
+    if (stockHistory.length > 1) {
+      const firstEntry = stockHistory[0];
+      const fallbackClose = firstEntry.close || firstEntry.price;
+      console.log('Helper: Using first entry as fallback previous close:', fallbackClose);
+      return fallbackClose;
+    }
+  }
+
+  return previousDayClose;
 };
 
 module.exports = {
