@@ -25,7 +25,7 @@ function StockChart({ mode, data, selectedRange, onRangeChange, onModeChange }) 
   const isDark = theme === 'dark';
 
   // Drawing tools state
-  const [activeTool, setActiveTool] = useState('trendline'); // 'trendline' | 'fibo' | 'ruler' | 'rectangle'
+  const [activeTool, setActiveTool] = useState(null); // null | 'trendline' | 'fibo' | 'ruler' | 'rectangle'
   const [shapes, setShapes] = useState([]); // Array of finalized shape objects
   const [isDrawing, setIsDrawing] = useState(false); // Track if currently drawing
   const [draftShape, setDraftShape] = useState(null); // Temporary shape during drag
@@ -834,7 +834,8 @@ function StockChart({ mode, data, selectedRange, onRangeChange, onModeChange }) 
 
   // Handle mouse down - start drawing
   const handleMouseDown = (e) => {
-    if (isDrawing) return;
+    // Only handle if a tool is active
+    if (!activeTool || isDrawing) return;
 
     e.preventDefault();
     e.stopPropagation();
@@ -941,6 +942,21 @@ function StockChart({ mode, data, selectedRange, onRangeChange, onModeChange }) 
       <div className="absolute top-2 left-2 z-20 flex flex-wrap gap-1 bg-white/90 dark:bg-gray-800/90 rounded-lg p-1 shadow-lg border border-gray-200 dark:border-gray-700">
         <button
           onClick={() => {
+            setActiveTool(null);
+            setDraftShape(null);
+            setIsDrawing(false);
+          }}
+          className={`px-2 py-1 text-xs rounded transition-colors ${
+            activeTool === null
+              ? 'bg-gray-500 text-white'
+              : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+          }`}
+          title="None (zoom/pan mode)"
+        >
+          🖱️ None
+        </button>
+        <button
+          onClick={() => {
             setActiveTool('trendline');
             setDraftShape(null);
             setIsDrawing(false);
@@ -1014,20 +1030,21 @@ function StockChart({ mode, data, selectedRange, onRangeChange, onModeChange }) 
         <div ref={chartContainerRef} style={{ width: '100%', height: '100%' }} />
         
         {/* Overlay layer (glass pane) - transparent layer on top of chart */}
-        {/* Captures mouse events for drawing tools */}
-        <div
-          className="absolute inset-0"
-          style={{
-            zIndex: 10,
-            pointerEvents: 'auto',
-            cursor: 'crosshair',
-            backgroundColor: 'transparent',
-          }}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseLeave}
-        >
+        {/* Only captures mouse events when a drawing tool is active */}
+        {activeTool && (
+          <div
+            className="absolute inset-0"
+            style={{
+              zIndex: 10,
+              pointerEvents: 'auto',
+              cursor: 'crosshair',
+              backgroundColor: 'transparent',
+            }}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseLeave}
+          >
           {/* Canvas for drawing shapes */}
           <canvas
             ref={overlayCanvasRef}
@@ -1039,7 +1056,8 @@ function StockChart({ mode, data, selectedRange, onRangeChange, onModeChange }) 
               pointerEvents: 'none', // Canvas itself doesn't capture events, parent div does
             }}
           />
-        </div>
+          </div>
+        )}
       </div>
 
     </div>

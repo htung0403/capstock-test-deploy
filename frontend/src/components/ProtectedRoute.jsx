@@ -20,8 +20,13 @@ const ProtectedRoute = ({ children, requireAdmin = false }) => {
   }
 
   if (requireAdmin) {
+    // Handle both roles (array) and role (string) for backward compatibility
     const userRoles = user?.roles || (user?.role ? [user.role] : []);
-    if (!userRoles.includes('ADMIN')) {
+    const hasAdminRole = Array.isArray(userRoles) 
+      ? userRoles.includes('ADMIN') 
+      : userRoles === 'ADMIN' || user?.role === 'ADMIN';
+    
+    if (!hasAdminRole) {
       return <Navigate to="/dashboard" replace />;
     }
   }

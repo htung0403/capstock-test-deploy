@@ -17,13 +17,11 @@ const HeroCard = ({ article, isDark }) => {
   return (
     <Link 
       to={`/news/${article._id}`}
-      className="group block h-full rounded-xl overflow-hidden border transition-all duration-300"
-      style={{
-        background: isDark 
-          ? 'linear-gradient(135deg, rgba(30, 41, 59, 0.5) 0%, rgba(15, 23, 42, 0.8) 100%)'
-          : 'linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(249, 250, 251, 1) 100%)',
-        borderColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'
-      }}
+      className={`group block h-full rounded-xl overflow-hidden border transition-all duration-300 ${
+        isDark
+          ? 'bg-slate-800/50 border-slate-700 hover:border-blue-500/50 hover:shadow-xl hover:shadow-blue-500/10'
+          : 'bg-white border-gray-200 hover:border-blue-500 hover:shadow-xl'
+      } hover:-translate-y-1`}
     >
       <div className="flex flex-col h-full">
         {/* Image Section - Reduced height */}
@@ -46,19 +44,25 @@ const HeroCard = ({ article, isDark }) => {
             </div>
           )}
           
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent" />
           
           {article.category && (
-            <div className="absolute top-2 left-2 z-10">
-              <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${categoryColor} text-white`}>
+            <div className="absolute top-4 left-4 z-10">
+              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${categoryColor} text-white shadow-lg`}>
                 {article.category.category_name}
               </span>
             </div>
           )}
           
-          {article.isPremium && (
-            <div className="absolute top-2 right-2 z-10">
-              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-gradient-to-r from-yellow-500 to-amber-500 text-white flex items-center gap-1">
+          {article.badge && (
+            <div className={`absolute top-4 right-4 z-10 ${article.badge.color} px-3 py-1 rounded-full text-xs font-bold text-white shadow-lg flex items-center gap-1`}>
+              {article.badge.label}
+            </div>
+          )}
+          
+          {!article.badge && article.isPremium && (
+            <div className="absolute top-4 right-4 z-10">
+              <span className="px-3 py-1 rounded-full text-xs font-semibold bg-gradient-to-r from-yellow-500 to-amber-500 text-white flex items-center gap-1 shadow-lg">
                 <Sparkles className="w-2.5 h-2.5" />
                 Premium
               </span>
@@ -67,10 +71,10 @@ const HeroCard = ({ article, isDark }) => {
         </div>
 
         {/* Content Section - Reduced height */}
-        <div className={`p-3 flex flex-col gap-1.5 ${
-          isDark ? 'bg-gray-800/50' : 'bg-white'
+        <div className={`p-4 flex flex-col gap-2 ${
+          isDark ? 'bg-slate-800/50' : 'bg-white'
         }`}>
-          <h1 className={`text-lg md:text-xl font-bold line-clamp-2 group-hover:text-blue-500 transition-colors ${
+          <h1 className={`text-xl md:text-2xl font-bold line-clamp-2 group-hover:text-blue-500 transition-colors leading-tight ${
             isDark ? 'text-white' : 'text-gray-900'
           }`}>
             {article.title}

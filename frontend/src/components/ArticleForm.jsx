@@ -7,6 +7,9 @@ import React, { useState, useEffect } from 'react';
 import { Editor } from '@tinymce/tinymce-react';
 import api from '../services/api'; // Your existing API service
 import { useTheme } from '../contexts/ThemeContext';
+import MultiSelect from './MultiSelect';
+import CategorySelect from './CategorySelect';
+import { toast } from 'react-toastify';
 // import { useAuth } from '../contexts/AuthContext'; // Removed as authorId will be passed as prop
 
 function ArticleForm({ articleId, onSave, initialData, authorId }) {
@@ -14,7 +17,7 @@ function ArticleForm({ articleId, onSave, initialData, authorId }) {
   const [summary, setSummary] = useState(initialData?.summary || '');
   const [content, setContent] = useState(initialData?.content || '');
   const [category, setCategory] = useState(initialData?.category?._id || '');
-  const [tags, setTags] = useState(initialData?.tags?.map(tag => tag.tag_name).join(', ') || ''); // Display tag names
+  const [selectedTagIds, setSelectedTagIds] = useState(initialData?.tags?.map(tag => tag._id) || []); // Store tag IDs
   const [symbol, setSymbol] = useState(initialData?.symbol || '');
   const [isPremium, setIsPremium] = useState(initialData?.isPremium || false);
   const [thumbnail, setThumbnail] = useState(initialData?.thumbnail || '');
@@ -51,7 +54,7 @@ function ArticleForm({ articleId, onSave, initialData, authorId }) {
           setSummary(data.summary);
           setContent(data.content);
           setCategory(data.category?._id || '');
-          setTags(data.tags?.map(tag => tag.tag_name).join(', ') || '');
+          setSelectedTagIds(data.tags?.map(tag => tag._id) || []);
           setSymbol(data.symbol || '');
           setIsPremium(data.isPremium);
           setThumbnail(data.thumbnail || '');
@@ -126,21 +129,39 @@ function ArticleForm({ articleId, onSave, initialData, authorId }) {
       return;
     }
 
-    // Convert tag names to ObjectIds
-    const selectedTagNames = tags.split(',').map(tag => tag.trim()).filter(Boolean);
-    const tagObjectIds = allTags.filter(tag => selectedTagNames.includes(tag.tag_name)).map(tag => tag._id);
+    // Determine final status and submitForReview flag
+    let finalStatus = articleStatus;
+    let finalSubmitForReview = false;
+
+    if (!articleId) {
+      // New article: use selected status
+      finalStatus = articleStatus; // 'draft' or 'pending'
+      finalSubmitForReview = articleStatus === 'pending';
+    } else {
+      // Existing article
+      if (articleStatus === 'published') {
+        // Published article: can only submit for review again
+        finalSubmitForReview = submitForReview;
+        finalStatus = 'published'; // Keep published status
+      } else if (articleStatus === 'draft' || articleStatus === 'denied') {
+        // Draft or denied: can change to pending
+        finalStatus = submitForReview ? 'pending' : 'draft';
+        finalSubmitForReview = submitForReview;
+      }
+    }
 
     const articleData = {
       title,
       summary,
       content,
       category,
-      tags: tagObjectIds, // Send ObjectIds
+      tags: selectedTagIds, // Send ObjectIds directly
       authorId: authorId, // Use authorId from props
       symbol: symbol.toUpperCase(),
       isPremium,
       thumbnail,
-      submitForReview: submitForReview || (articleStatus === 'published' && articleId), // Auto-submit if published
+      status: finalStatus, // Send status explicitly
+      submitForReview: finalSubmitForReview,
     };
 
     const url = articleId ? `/writer/article/${articleId}` : '/writer'; // Removed /api
@@ -326,44 +347,53 @@ function ArticleForm({ articleId, onSave, initialData, authorId }) {
           />
         </div>
       </div>
-      <div>
-        <label className={`block text-sm font-semibold mb-2 ${
-          darkMode ? 'text-gray-200' : 'text-gray-900'
-        }`}>Category:</label>
-        <select 
-          value={category} 
-          onChange={(e) => setCategory(e.target.value)} 
-          required 
-          className={`mt-1 block w-full px-3 py-2.5 rounded-md border shadow-sm focus:outline-none focus:ring-2 transition-all duration-200 cursor-pointer ${
-            darkMode
-              ? 'border-gray-600 bg-gray-700 text-gray-100 focus:ring-blue-400 focus:border-transparent'
-              : 'border-gray-300 bg-white text-gray-900 focus:ring-blue-500 focus:border-blue-400'
-          }`}
-        >
-          <option value="" className={darkMode ? 'bg-gray-700 text-gray-100' : 'bg-white text-gray-900'}>Select a category</option>
-          {categories.map((cat) => (
-            <option key={cat._id} value={cat._id} className={darkMode ? 'bg-gray-700 text-gray-100' : 'bg-white text-gray-900'}>
-              {cat.category_name}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div>
-        <label className={`block text-sm font-semibold mb-2 ${
-          darkMode ? 'text-gray-200' : 'text-gray-900'
-        }`}>Tags (comma separated names):</label>
-        <input 
-          type="text" 
-          value={tags} 
-          onChange={(e) => setTags(e.target.value)} 
-          placeholder="e.g., technology, finance, market news" 
-          className={`mt-1 block w-full px-3 py-2.5 rounded-md border shadow-sm focus:outline-none focus:ring-2 transition-all duration-200 ${
-            darkMode
-              ? 'border-gray-600 bg-gray-700 text-gray-100 placeholder-gray-500 focus:ring-blue-400 focus:border-transparent'
-              : 'border-gray-300 bg-white text-gray-900 placeholder-gray-400 focus:ring-blue-500 focus:border-blue-400'
-          }`}
-        />
-      </div>
+      <CategorySelect
+        label="Category"
+        options={categories}
+        value={category}
+        onChange={setCategory}
+        onCreateNew={async (categoryName) => {
+          try {
+            const response = await api.post('/categories', { category_name: categoryName });
+            const newCategory = response.data;
+            setCategories([...categories, newCategory]);
+            toast.success(`Category "${newCategory.category_name}" created successfully`);
+            return newCategory;
+          } catch (error) {
+            console.error('Error creating category:', error);
+            toast.error(error?.response?.data?.message || 'Failed to create category');
+            throw error;
+          }
+        }}
+        required
+        placeholder="Search or create category..."
+      />
+      <MultiSelect
+        label="Tags"
+        options={allTags}
+        selected={selectedTagIds}
+        onChange={setSelectedTagIds}
+        onCreateNew={async (tagName) => {
+          try {
+            const response = await api.post('/tags', { tag_name: tagName });
+            const newTag = response.data;
+            setAllTags([...allTags, newTag]);
+            toast.success(`Tag "${newTag.tag_name}" created successfully`);
+            return newTag;
+          } catch (error) {
+            console.error('Error creating tag:', error);
+            // If tag already exists, return it
+            if (error?.response?.status === 200) {
+              const existingTag = error.response.data;
+              setAllTags([...allTags, existingTag]);
+              return existingTag;
+            }
+            toast.error(error?.response?.data?.message || 'Failed to create tag');
+            throw error;
+          }
+        }}
+        placeholder="Search or create tags..."
+      />
       <div>
         <label className={`block text-sm font-semibold mb-2 ${
           darkMode ? 'text-gray-200' : 'text-gray-900'
@@ -416,32 +446,132 @@ function ArticleForm({ articleId, onSave, initialData, authorId }) {
           </label>
         </div>
       )}
-      {(articleId && (articleStatus === 'draft' || articleStatus === 'denied')) && (
+      {/* Status Selection - Only show for new articles or draft/denied articles */}
+      {(!articleId || articleStatus === 'draft' || articleStatus === 'denied') && (
+        <div className={`p-4 rounded-md border transition-colors duration-200 ${
+          darkMode
+            ? 'bg-gray-700/50 border-gray-600'
+            : 'bg-gray-50 border-gray-200'
+        }`}>
+          <label className={`block text-sm font-semibold mb-3 ${
+            darkMode ? 'text-gray-200' : 'text-gray-900'
+          }`}>
+            Article Status:
+          </label>
+          <div className="space-y-2">
+            <label className={`flex items-center p-3 rounded-md border cursor-pointer transition-colors ${
+              articleStatus === 'draft'
+                ? darkMode
+                  ? 'bg-blue-900/30 border-blue-600'
+                  : 'bg-blue-50 border-blue-400'
+                : darkMode
+                ? 'border-gray-600 hover:bg-gray-700'
+                : 'border-gray-300 hover:bg-gray-100'
+            }`}>
+              <input
+                type="radio"
+                name="articleStatus"
+                value="draft"
+                checked={articleStatus === 'draft'}
+                onChange={(e) => {
+                  setArticleStatus(e.target.value);
+                  setSubmitForReview(false);
+                }}
+                className="h-4 w-4 text-blue-600 dark:text-blue-400 focus:ring-2 focus:ring-blue-500 cursor-pointer"
+              />
+              <div className="ml-3 flex-1">
+                <div className={`font-medium ${
+                  darkMode ? 'text-gray-200' : 'text-gray-900'
+                }`}>
+                  📝 Draft
+                </div>
+                <div className={`text-xs mt-0.5 ${
+                  darkMode ? 'text-gray-400' : 'text-gray-600'
+                }`}>
+                  Save as draft. You can edit and submit later.
+                </div>
+              </div>
+            </label>
+
+            <label className={`flex items-center p-3 rounded-md border cursor-pointer transition-colors ${
+              articleStatus === 'pending'
+                ? darkMode
+                  ? 'bg-yellow-900/30 border-yellow-600'
+                  : 'bg-yellow-50 border-yellow-400'
+                : darkMode
+                ? 'border-gray-600 hover:bg-gray-700'
+                : 'border-gray-300 hover:bg-gray-100'
+            }`}>
+              <input
+                type="radio"
+                name="articleStatus"
+                value="pending"
+                checked={articleStatus === 'pending'}
+                onChange={(e) => {
+                  setArticleStatus(e.target.value);
+                  setSubmitForReview(true);
+                }}
+                className="h-4 w-4 text-yellow-600 dark:text-yellow-400 focus:ring-2 focus:ring-yellow-500 cursor-pointer"
+              />
+              <div className="ml-3 flex-1">
+                <div className={`font-medium ${
+                  darkMode ? 'text-gray-200' : 'text-gray-900'
+                }`}>
+                  ⏳ Submit for Review
+                </div>
+                <div className={`text-xs mt-0.5 ${
+                  darkMode ? 'text-gray-400' : 'text-gray-600'
+                }`}>
+                  Submit to editor for review. Status will be "pending" until approved.
+                </div>
+              </div>
+            </label>
+          </div>
+          <div className={`mt-3 p-2 rounded text-xs ${
+            darkMode ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-600'
+          }`}>
+            <strong>Note:</strong> Only editors can publish articles. Your article will be reviewed before publication.
+          </div>
+        </div>
+      )}
+
+      {/* Show checkbox for existing published articles */}
+      {articleId && articleStatus === 'published' && (
         <div className={`flex items-center p-4 rounded-md border transition-colors duration-200 ${
           darkMode
-            ? 'bg-blue-900/20 border-blue-700'
-            : 'bg-blue-50 border-blue-200'
+            ? 'bg-yellow-900/20 border-yellow-700'
+            : 'bg-yellow-50 border-yellow-200'
         }`}>
           <input 
             type="checkbox" 
-            id="submitForReviewDraft" 
+            id="submitForReview" 
             checked={submitForReview} 
             onChange={(e) => setSubmitForReview(e.target.checked)} 
             className="h-4 w-4 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:ring-offset-0 cursor-pointer transition-colors duration-200"
           />
-          <label htmlFor="submitForReviewDraft" className={`ml-3 block text-sm font-semibold cursor-pointer ${
-            darkMode ? 'text-blue-200' : 'text-blue-800'
+          <label htmlFor="submitForReview" className={`ml-3 block text-sm font-semibold cursor-pointer ${
+            darkMode ? 'text-yellow-200' : 'text-yellow-800'
           }`}>
-            Submit for Review after saving
+            Save & Submit for Review (changes will go back to editor review)
           </label>
         </div>
       )}
-      <button 
-        type="submit" 
-        className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-md shadow-md text-sm font-semibold text-white bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-blue-400 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        {articleId ? 'Update Article' : 'Create Article'}
-      </button>
+
+      <div className="flex gap-3">
+        <button 
+          type="submit" 
+          className="flex-1 flex justify-center items-center py-3 px-4 border border-transparent rounded-md shadow-md text-sm font-semibold text-white bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-blue-400 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {articleId 
+            ? articleStatus === 'pending' 
+              ? 'Update & Keep Pending' 
+              : 'Update Article'
+            : articleStatus === 'pending'
+              ? 'Create & Submit for Review'
+              : 'Create as Draft'
+          }
+        </button>
+      </div>
     </form>
   );
 }

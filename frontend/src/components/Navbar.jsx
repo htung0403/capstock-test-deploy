@@ -155,7 +155,14 @@ const Navbar = () => {
                       <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>{user?.username}</p>
                       <p className="text-xs" style={{ color: 'var(--muted)' }}>{user?.email}</p>
                       <p className="text-xs text-green-600 font-semibold mt-1">
-                        ${user?.balance?.toLocaleString() || 0}
+                        {user?.balance != null 
+                          ? new Intl.NumberFormat('en-US', {
+                              style: 'currency',
+                              currency: 'USD',
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            }).format(user.balance)
+                          : '$0.00'}
                       </p>
                     </div>
 
