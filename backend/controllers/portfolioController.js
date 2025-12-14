@@ -7,10 +7,16 @@ const portfolioService = require('../services/portfolioService');
 const asyncHandler = require('express-async-handler');
 
 exports.getPortfolio = asyncHandler(async (req, res) => {
-  const portfolio = await Portfolio.findOne({ user: req.user.id }).populate('holdings.stock');
+  let portfolio = await Portfolio.findOne({ user: req.user.id }).populate('holdings.stock');
+  
+  // If portfolio doesn't exist for new user, create an empty one
   if (!portfolio) {
-    return res.status(404).json({ message: 'Portfolio not found.' });
+    portfolio = await Portfolio.create({
+      user: req.user.id,
+      holdings: [], // Empty portfolio for new users
+    });
   }
+  
   res.json(portfolio);
 });
 
@@ -46,4 +52,15 @@ exports.getPortfolioGrowthOverTime = asyncHandler(async (req, res) => {
   const { period } = req.query; // e.g., ?period=7d
   const growthData = await portfolioService.getPortfolioGrowthOverTime(userId, period);
   res.status(200).json(growthData);
+});
+
+/**
+ * @desc Get portfolio summary (Total Value, Total Invested, Profit/Loss, Daily P/L, Best/Worst stock)
+ * @route GET /api/portfolio/summary
+ * @access Private
+ */
+exports.getPortfolioSummary = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const summary = await portfolioService.getPortfolioSummary(userId);
+  res.status(200).json(summary);
 });

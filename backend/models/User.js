@@ -62,6 +62,15 @@ const UserSchema = new mongoose.Schema({
     type: Date,
     default: null,
   },
+  refreshToken: {
+    type: String,
+    default: null,
+    select: false, // Don't return by default
+  },
+  refreshTokenExpires: {
+    type: Date,
+    default: null,
+  },
   balance: {
     type: Number,
     default: 0,
@@ -99,9 +108,10 @@ UserSchema.pre('save', function (next) {
   if (this.role && !this.roles.includes(this.role)) {
     this.roles.push(this.role);
   }
-  // Ensure USER role is always present
-  if (!this.roles.includes('USER')) {
-    this.roles.push('USER');
+  // Only ensure USER role if no other role is present (ADMIN, WRITER, EDITOR don't need USER)
+  // ADMIN has all permissions, so it doesn't need USER role
+  if (this.roles.length === 0) {
+    this.roles = ['USER'];
   }
   next();
 });

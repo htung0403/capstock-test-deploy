@@ -9,6 +9,41 @@ const jwt = require('jsonwebtoken');
 const { sendPasswordResetEmail } = require('../services/emailService');
 const asyncHandler = require('express-async-handler');
 
+// Helper function to generate refresh token
+const generateRefreshToken = () => {
+  return crypto.randomBytes(64).toString('hex');
+};
+
+// Helper function to set httpOnly cookies
+const setAuthCookies = (res, accessToken, refreshToken) => {
+  const isProduction = process.env.NODE_ENV === 'production';
+  const cookieOptions = {
+    httpOnly: true, // Prevent XSS attacks
+    secure: isProduction, // HTTPS only in production
+    sameSite: isProduction ? 'none' : 'lax', // CSRF protection
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    path: '/',
+  };
+
+  // Access token (short-lived: 15 minutes)
+  res.cookie('accessToken', accessToken, {
+    ...cookieOptions,
+    maxAge: 15 * 60 * 1000, // 15 minutes
+  });
+
+  // Refresh token (long-lived: 7 days)
+  res.cookie('refreshToken', refreshToken, {
+    ...cookieOptions,
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+  });
+};
+
+// Helper function to clear auth cookies
+const clearAuthCookies = (res) => {
+  res.clearCookie('accessToken', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/' });
+  res.clearCookie('refreshToken', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/' });
+};
+
 // Đăng ký
 exports.register = async (req, res) => {
   try {
@@ -78,11 +113,9 @@ exports.register = async (req, res) => {
 
     // ========== DUPLICATE CHECK ==========
     // Check if username already exists (case-insensitive check)
+    // Use case-insensitive regex for better duplicate detection
     const existingUsername = await User.findOne({
-      $or: [
-        { username: normalizedUsername },
-        { username: new RegExp(`^${normalizedUsername}$`, 'i') }
-      ]
+      username: new RegExp(`^${normalizedUsername.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')
     });
     if (existingUsername) {
       return res.status(400).json({
@@ -91,7 +124,7 @@ exports.register = async (req, res) => {
       });
     }
 
-    // Check if email already exists
+    // Check if email already exists (email is already normalized to lowercase)
     const existingEmail = await User.findOne({ email: normalizedEmail });
     if (existingEmail) {
       // Check if the existing email belongs to a banned account
@@ -108,13 +141,76 @@ exports.register = async (req, res) => {
     }
 
     // ========== CREATE USER ==========
-    // Use findOneAndUpdate with upsert to prevent race condition
-    // But since we need to create new user, use create with proper error handling
-    const user = await User.create({
-      username: normalizedUsername,
-      email: normalizedEmail,
-      password: trimmedPassword, // Will be hashed by pre-save hook
-    });
+    // Use transaction-like approach: create user and handle errors properly
+    let user = null;
+    try {
+      user = await User.create({
+        username: normalizedUsername,
+        email: normalizedEmail,
+        password: trimmedPassword, // Will be hashed by pre-save hook
+      });
+    } catch (createError) {
+      // If user was created but there's an error, we need to handle it
+      // This handles race conditions where duplicate check passed but unique index failed
+      if (createError.code === 11000) {
+        const field = Object.keys(createError.keyPattern)[0];
+        if (field === 'username') {
+          return res.status(400).json({
+            message: 'Username already exists. Please choose a different username.',
+            status: 'error',
+          });
+        }
+        if (field === 'email') {
+          return res.status(400).json({
+            message: 'Email already registered. Please use a different email or try logging in.',
+            status: 'error',
+          });
+        }
+        return res.status(400).json({
+          message: `${field} already exists`,
+          status: 'error',
+        });
+      }
+      // Re-throw other errors to be handled by outer catch
+      throw createError;
+    }
+
+    // Double-check user was created successfully
+    if (!user) {
+      return res.status(500).json({
+        message: 'Failed to create user. Please try again.',
+        status: 'error',
+      });
+    }
+
+    // ========== GENERATE TOKENS ==========
+    // JWT_SECRET must be set in environment variables for security
+    if (!process.env.JWT_SECRET) {
+      console.error('ERROR: JWT_SECRET is not set in environment variables!');
+      return res.status(500).json({
+        message: 'Server configuration error. Please contact administrator.',
+        status: 'error',
+      });
+    }
+    
+    // Generate access token (short-lived: 15 minutes)
+    const accessToken = jwt.sign(
+      { id: user._id }, // Only include ID for security
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '15m' } // 15 minutes
+    );
+
+    // Generate refresh token
+    const refreshToken = generateRefreshToken();
+    const refreshTokenExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+    // Save refresh token to database
+    user.refreshToken = refreshToken;
+    user.refreshTokenExpires = refreshTokenExpires;
+    await user.save({ validateBeforeSave: false });
+
+    // ========== SET HTTPONLY COOKIES ==========
+    setAuthCookies(res, accessToken, refreshToken);
 
     // ========== RESPONSE ==========
     // Remove sensitive fields from response
@@ -122,6 +218,8 @@ exports.register = async (req, res) => {
     delete userResponse.password;
     delete userResponse.resetPasswordToken;
     delete userResponse.resetPasswordExpires;
+    delete userResponse.refreshToken;
+    delete userResponse.refreshTokenExpires;
 
     res.status(201).json({
       message: 'Account created successfully',
@@ -138,7 +236,7 @@ exports.register = async (req, res) => {
       });
     }
 
-    // Handle duplicate key errors (race condition fallback)
+    // Handle duplicate key errors (race condition fallback - should be caught above but just in case)
     if (err.code === 11000) {
       const field = Object.keys(err.keyPattern)[0];
       if (field === 'username') {
@@ -160,8 +258,24 @@ exports.register = async (req, res) => {
     }
 
     console.error('Registration error:', err);
+    
+    // Provide more specific error messages based on error type
+    let errorMessage = 'Registration failed. Please try again later.';
+    
+    if (err.message) {
+      // If it's a known error, use the message
+      if (err.message.includes('network') || err.message.includes('ECONNREFUSED')) {
+        errorMessage = 'Cannot connect to server. Please check your internet connection.';
+      } else if (err.message.includes('timeout')) {
+        errorMessage = 'Request timeout. Please try again.';
+      } else if (process.env.NODE_ENV === 'development') {
+        // In development, show more details
+        errorMessage = `Registration failed: ${err.message}`;
+      }
+    }
+    
     res.status(500).json({
-      message: 'Registration failed. Please try again later.',
+      message: errorMessage,
       status: 'error',
       error: process.env.NODE_ENV === 'development' ? err.message : undefined,
     });
@@ -233,14 +347,35 @@ exports.login = async (req, res) => {
 
     // ========== UPDATE LAST LOGIN ==========
     user.lastLogin = new Date();
-    await user.save({ validateBeforeSave: false });
 
-    // ========== GENERATE JWT TOKEN ==========
-    const token = jwt.sign(
+    // ========== GENERATE TOKENS ==========
+    // JWT_SECRET must be set in environment variables for security
+    if (!process.env.JWT_SECRET) {
+      console.error('ERROR: JWT_SECRET is not set in environment variables!');
+      return res.status(500).json({
+        message: 'Server configuration error. Please contact administrator.',
+        status: 'error',
+      });
+    }
+
+    // Generate access token (short-lived: 15 minutes)
+    const accessToken = jwt.sign(
       { id: user._id },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+      { expiresIn: process.env.JWT_EXPIRES_IN || '15m' } // 15 minutes
     );
+
+    // Generate refresh token
+    const refreshToken = generateRefreshToken();
+    const refreshTokenExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+    // Save refresh token to database
+    user.refreshToken = refreshToken;
+    user.refreshTokenExpires = refreshTokenExpires;
+    await user.save({ validateBeforeSave: false });
+
+    // ========== SET HTTPONLY COOKIES ==========
+    setAuthCookies(res, accessToken, refreshToken);
 
     // ========== PREPARE RESPONSE ==========
     // Remove sensitive fields from user object
@@ -248,17 +383,37 @@ exports.login = async (req, res) => {
     delete userResponse.password;
     delete userResponse.resetPasswordToken;
     delete userResponse.resetPasswordExpires;
+    delete userResponse.refreshToken;
+    delete userResponse.refreshTokenExpires;
 
     res.status(200).json({
       message: 'Login successful',
       status: 'success',
-      token,
       user: userResponse,
     });
   } catch (err) {
     console.error('Login error:', err);
+    
+    // Provide more specific error messages based on error type
+    let errorMessage = 'Login failed. Please try again later.';
+    
+    if (err.message) {
+      // If it's a known error, use the message
+      if (err.message.includes('network') || err.message.includes('ECONNREFUSED')) {
+        errorMessage = 'Cannot connect to server. Please check your internet connection.';
+      } else if (err.message.includes('timeout')) {
+        errorMessage = 'Request timeout. Please try again.';
+      } else if (err.name === 'ValidationError') {
+        const messages = Object.values(err.errors).map(e => e.message).join(', ');
+        errorMessage = messages;
+      } else if (process.env.NODE_ENV === 'development') {
+        // In development, show more details
+        errorMessage = `Login failed: ${err.message}`;
+      }
+    }
+    
     res.status(500).json({
-      message: 'Login failed. Please try again later.',
+      message: errorMessage,
       status: 'error',
       error: process.env.NODE_ENV === 'development' ? err.message : undefined,
     });
@@ -266,8 +421,126 @@ exports.login = async (req, res) => {
 };
 
 // Lấy profile
+// Refresh access token using refresh token
+exports.refreshToken = async (req, res) => {
+  try {
+    const refreshToken = req.cookies?.refreshToken;
+
+    if (!refreshToken) {
+      return res.status(401).json({
+        message: 'No refresh token provided',
+        status: 'error',
+      });
+    }
+
+    // Find user with matching refresh token
+    const user = await User.findOne({ 
+      refreshToken,
+      refreshTokenExpires: { $gt: new Date() } // Token not expired
+    }).select('+refreshToken +refreshTokenExpires');
+
+    if (!user) {
+      clearAuthCookies(res);
+      return res.status(401).json({
+        message: 'Invalid or expired refresh token',
+        status: 'error',
+      });
+    }
+
+    // Check if user is banned
+    if (user.isBanned) {
+      clearAuthCookies(res);
+      return res.status(403).json({
+        message: 'Account is banned. Please contact administrator.',
+        status: 'error',
+      });
+    }
+
+    // Generate new access token
+    if (!process.env.JWT_SECRET) {
+      console.error('ERROR: JWT_SECRET is not set in environment variables!');
+      return res.status(500).json({
+        message: 'Server configuration error. Please contact administrator.',
+        status: 'error',
+      });
+    }
+
+    const accessToken = jwt.sign(
+      { id: user._id },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '15m' } // 15 minutes
+    );
+
+    // Set new access token cookie
+    const isProduction = process.env.NODE_ENV === 'production';
+    res.cookie('accessToken', accessToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
+      maxAge: 15 * 60 * 1000, // 15 minutes
+      path: '/',
+    });
+
+    res.status(200).json({
+      message: 'Token refreshed successfully',
+      status: 'success',
+    });
+  } catch (err) {
+    console.error('Refresh token error:', err);
+    clearAuthCookies(res);
+    res.status(500).json({
+      message: 'Failed to refresh token. Please login again.',
+      status: 'error',
+    });
+  }
+};
+
+// Logout - clear tokens
+exports.logout = async (req, res) => {
+  try {
+    const refreshToken = req.cookies?.refreshToken;
+
+    // Clear refresh token from database if exists
+    if (refreshToken) {
+      await User.findOneAndUpdate(
+        { refreshToken },
+        { 
+          refreshToken: null,
+          refreshTokenExpires: null
+        }
+      );
+    }
+
+    // Clear cookies
+    clearAuthCookies(res);
+
+    res.status(200).json({
+      message: 'Logged out successfully',
+      status: 'success',
+    });
+  } catch (err) {
+    console.error('Logout error:', err);
+    // Still clear cookies even if database update fails
+    clearAuthCookies(res);
+    res.status(200).json({
+      message: 'Logged out successfully',
+      status: 'success',
+    });
+  }
+};
+
 exports.getProfile = async (req, res) => {
-  const user = await User.findById(req.user.id);
+  const user = await User.findById(req.user.id).select('-password');
+  
+  // Ensure roles array exists for backward compatibility
+  if (!user.roles || user.roles.length === 0) {
+    user.roles = user.role ? [user.role] : ['USER'];
+    // Only save if roles was actually empty (pre-save hook will handle it)
+    if (user.isModified('roles')) {
+      await user.save();
+    }
+  }
+  
   res.json(user);
 };
 

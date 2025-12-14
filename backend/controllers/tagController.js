@@ -18,17 +18,63 @@ exports.getAllTags = async (req, res) => {
   }
 };
 
+// Helper function to normalize tag name
+const normalizeTagName = (tagName) => {
+  if (!tagName || typeof tagName !== 'string') {
+    return null;
+  }
+  // Trim, lowercase, remove special characters (keep only alphanumeric, spaces, hyphens, underscores)
+  return tagName
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\s\-_]/g, '') // Remove special characters
+    .replace(/\s+/g, '-') // Replace spaces with hyphens
+    .replace(/-+/g, '-') // Replace multiple hyphens with single hyphen
+    .replace(/^-|-$/g, ''); // Remove leading/trailing hyphens
+};
+
 // @desc    Create a new tag
 // @route   POST /api/tags
 // @access  Private (Admin, Editor, Writer)
 exports.createTag = async (req, res) => {
   const { tag_name } = req.body;
 
+  if (!tag_name || typeof tag_name !== 'string' || !tag_name.trim()) {
+    return res.status(400).json({ message: 'Tag name is required' });
+  }
+
+  // Normalize tag name
+  const normalizedTagName = normalizeTagName(tag_name);
+  
+  if (!normalizedTagName || normalizedTagName.length < 2) {
+    return res.status(400).json({ message: 'Tag name must be at least 2 characters after normalization' });
+  }
+
+  if (normalizedTagName.length > 50) {
+    return res.status(400).json({ message: 'Tag name must be less than 50 characters' });
+  }
+
   try {
-    const tag = await Tag.create({ tag_name });
+    // Check if tag already exists (case-insensitive)
+    const existingTag = await Tag.findOne({ 
+      tag_name: new RegExp(`^${normalizedTagName}$`, 'i') 
+    });
+
+    if (existingTag) {
+      return res.status(200).json(existingTag); // Return existing tag instead of error
+    }
+
+    const tag = await Tag.create({ tag_name: normalizedTagName });
     res.status(201).json(tag);
   } catch (error) {
     console.error('Error creating tag:', error);
+    if (error.code === 11000) {
+      // Duplicate key error
+      const existingTag = await Tag.findOne({ tag_name: normalizedTagName });
+      if (existingTag) {
+        return res.status(200).json(existingTag);
+      }
+    }
     res.status(500).json({ message: 'Failed to create tag.', error: error.message });
   }
 };

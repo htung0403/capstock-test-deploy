@@ -9,16 +9,51 @@ const User = require('../models/User');
 // Xác thực người dùng qua Bearer token
 exports.protect = async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization || '';
-    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    // Check if JWT_SECRET is configured
+    if (!process.env.JWT_SECRET) {
+      console.error('ERROR: JWT_SECRET is not set in environment variables!');
+      return res.status(500).json({ 
+        message: 'Server configuration error. Please contact administrator.',
+        error: 'JWT_SECRET not configured'
+      });
+    }
+
+    // Try to get token from cookie first (httpOnly), then from Authorization header (for backward compatibility)
+    let token = req.cookies?.accessToken;
+    
+    if (!token) {
+      // Fallback to Authorization header for backward compatibility
+      const authHeader = req.headers.authorization || '';
+      token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    }
 
     if (!token) {
       return res.status(401).json({ message: 'No token provided' });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    // Verify JWT token
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (jwtError) {
+      // Handle specific JWT errors
+      if (jwtError.name === 'TokenExpiredError') {
+        return res.status(401).json({ 
+          message: 'Token has expired. Please login again.',
+          error: 'TokenExpiredError'
+        });
+      }
+      if (jwtError.name === 'JsonWebTokenError') {
+        return res.status(401).json({ 
+          message: 'Invalid token. Please login again.',
+          error: 'InvalidToken'
+        });
+      }
+      throw jwtError; // Re-throw unknown errors
+    }
+
     if (!decoded?.id || !mongoose.Types.ObjectId.isValid(decoded.id)) {
-      return res.status(401).json({ message: 'Invalid token' });
+      return res.status(401).json({ message: 'Invalid token format' });
     }
 
     const user = await User.findById(decoded.id).select('-password');
@@ -57,7 +92,16 @@ exports.authorize = (roles = []) => {
     const hasRequiredRole = roles.some(role => userRoles.includes(role));
     
     if (!hasRequiredRole) {
-      return res.status(403).json({ message: 'Forbidden - Insufficient role' });
+      console.log('[AuthMiddleware] Authorization failed:', {
+        requiredRoles: roles,
+        userRoles: userRoles,
+        userId: req.user.id,
+      });
+      return res.status(403).json({ 
+        message: 'Forbidden - Insufficient role',
+        required: roles,
+        current: userRoles,
+      });
     }
     next();
   };

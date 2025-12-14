@@ -69,8 +69,9 @@ exports.updateUserRoles = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'Cannot remove ADMIN role from yourself' });
   }
 
-  // Ensure USER role is always present
-  const updatedRoles = roles.includes('USER') ? roles : ['USER', ...roles];
+  // Only add USER role if no other role is present (ADMIN, WRITER, EDITOR don't need USER)
+  // ADMIN has all permissions, so it doesn't need USER role
+  const updatedRoles = roles.length > 0 ? roles : ['USER'];
 
   const user = await User.findByIdAndUpdate(
     id,

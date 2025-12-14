@@ -3,7 +3,7 @@
   Purpose: Define portfolio-related API endpoints for holdings, positions, and updates.
 */
 const express = require('express');
-const { getPortfolio, getPortfolioDistributionByStock, getPortfolioDistributionBySector, getPortfolioGrowthOverTime } = require('../controllers/portfolioController');
+const { getPortfolio, getPortfolioDistributionByStock, getPortfolioDistributionBySector, getPortfolioGrowthOverTime, getPortfolioSummary } = require('../controllers/portfolioController');
 const { protect } = require('../middlewares/authMiddleware');
 
 const router = express.Router();
@@ -30,5 +30,10 @@ router.get('/distribution/sector', getPortfolioDistributionBySector);
 // @desc Get portfolio growth over time
 // @access Private
 router.get('/growth', getPortfolioGrowthOverTime);
+
+// @route GET /api/portfolio/summary
+// @desc Get portfolio summary (Total Value, Total Invested, Profit/Loss, Daily P/L, Best/Worst stock)
+// @access Private
+router.get('/summary', getPortfolioSummary);
 
 module.exports = router;

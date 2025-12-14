@@ -10,7 +10,7 @@ const User = require('../models/User'); // Updated path
 
 // Create a new article (defaults to draft)
 const createArticle = async (req, res) => {
-  const { title, summary, content, category, tags, authorId, symbol, isPremium, thumbnail } = req.body;
+  const { title, summary, content, category, tags, authorId, symbol, isPremium, thumbnail, status } = req.body;
 
   try {
     // Validate category and tags exist
@@ -29,6 +29,13 @@ const createArticle = async (req, res) => {
       }
     }
 
+    // Validate status: Writers can only create articles as 'draft' or 'pending'
+    // 'published' and 'denied' can only be set by editors
+    let articleStatus = status || 'draft';
+    if (articleStatus !== 'draft' && articleStatus !== 'pending') {
+      articleStatus = 'draft'; // Default to draft if invalid status
+    }
+
     const newArticle = await Article.create({
       title,
       summary,
@@ -39,7 +46,7 @@ const createArticle = async (req, res) => {
       symbol,
       isPremium,
       thumbnail,
-      status: 'draft', // Default to draft, writer must submit for review
+      status: articleStatus, // Use provided status (draft or pending)
     });
     res.status(201).json(newArticle);
   } catch (error) {
@@ -84,7 +91,7 @@ const getArticleById = async (req, res) => {
 // Update an article with different rules based on status
 const updateArticle = async (req, res) => {
   const { id } = req.params;
-  const { title, summary, content, category, tags, symbol, isPremium, thumbnail, submitForReview } = req.body;
+  const { title, summary, content, category, tags, symbol, isPremium, thumbnail, submitForReview, status } = req.body;
 
   try {
     const article = await Article.findById(id);
@@ -113,23 +120,28 @@ const updateArticle = async (req, res) => {
     }
 
     // Handle different statuses
-    if (article.status === 'draft') {
-      // Normal editing, keep as draft unless submitForReview is true
-      article.title = title || article.title;
-      article.summary = summary || article.summary;
-      article.content = content || article.content;
-      article.category = category || article.category;
-      article.tags = tags || article.tags;
-      article.symbol = symbol || article.symbol;
-      article.isPremium = isPremium !== undefined ? isPremium : article.isPremium;
-      article.thumbnail = thumbnail || article.thumbnail;
-      article.updatedAt = Date.now();
-      
-      if (submitForReview) {
-        article.status = 'pending';
+    // Writers can only set status to 'draft' or 'pending'
+    // 'published' and 'denied' can only be set by editors
+    let newStatus = article.status; // Keep current status by default
+    
+    if (status && (status === 'draft' || status === 'pending')) {
+      // Only allow draft or pending for writers
+      if (article.status === 'draft' || article.status === 'denied') {
+        newStatus = status;
+      } else if (article.status === 'pending' && status === 'draft') {
+        // Allow reverting from pending to draft
+        newStatus = status;
       }
-    } else if (article.status === 'denied') {
-      // Allow editing, but status stays denied until explicitly submitted
+    } else if (submitForReview) {
+      // Legacy support: submitForReview flag
+      if (article.status === 'draft' || article.status === 'denied') {
+        newStatus = 'pending';
+      }
+    }
+
+    // Update article fields based on current status
+    if (article.status === 'draft' || article.status === 'denied') {
+      // Normal editing, allow status change
       article.title = title || article.title;
       article.summary = summary || article.summary;
       article.content = content || article.content;
@@ -138,11 +150,11 @@ const updateArticle = async (req, res) => {
       article.symbol = symbol || article.symbol;
       article.isPremium = isPremium !== undefined ? isPremium : article.isPremium;
       article.thumbnail = thumbnail || article.thumbnail;
+      article.status = newStatus;
       article.updatedAt = Date.now();
       
-      if (submitForReview) {
-        article.status = 'pending';
-        // Clear review fields when resubmitting
+      // Clear review fields when changing from denied to pending
+      if (newStatus === 'pending' && article.status === 'denied') {
         article.reviewedBy = null;
         article.reviewedAt = null;
       }

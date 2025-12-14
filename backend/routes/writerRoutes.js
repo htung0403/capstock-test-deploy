@@ -15,7 +15,7 @@ const router = express.Router();
 // router.use(authorize(['WRITER', 'ADMIN']));
 
 router.post('/', writerController.createArticle);
-router.get('/all-articles', authorize(['ADMIN']), writerController.getAllArticles); // New route for admin
+router.get('/all-articles', protect, authorize(['ADMIN']), writerController.getAllArticles); // New route for admin
 router.get('/:authorId', writerController.getWriterArticles);
 router.get('/article/:id', writerController.getArticleById);
 router.put('/article/:id', writerController.updateArticle);

@@ -31,12 +31,57 @@ exports.updateStock = async (req, res) => {
 
 // Get history snapshots for a symbol
 // Priority: DailyPrice (from backfill) > StockHistory (from real-time updates)
+// Supports range parameter: 1D, 1W, 1M, 3M, 6M, YTD, 1Y, 2Y, 5Y, 10Y, ALL
 exports.getHistoryBySymbol = async (req, res) => {
   try {
     const { symbol } = req.params;
     const limit = Math.min(parseInt(req.query.limit || '500', 10), 5000);
-    const from = req.query.from ? new Date(req.query.from) : null;
-    const to = req.query.to ? new Date(req.query.to) : null;
+    let from = req.query.from ? new Date(req.query.from) : null;
+    let to = req.query.to ? new Date(req.query.to) : null;
+    
+    // Support range parameter (1D, 1W, 1M, etc.)
+    const range = req.query.range;
+    if (range && !from) {
+      const now = new Date();
+      switch (range) {
+        case '1D':
+          from = new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000);
+          break;
+        case '1W':
+          from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          break;
+        case '1M':
+          from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          break;
+        case '3M':
+          from = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+          break;
+        case '6M':
+          from = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
+          break;
+        case 'YTD':
+          from = new Date(now.getFullYear(), 0, 1);
+          break;
+        case '1Y':
+          from = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+          break;
+        case '2Y':
+          from = new Date(now.getTime() - 2 * 365 * 24 * 60 * 60 * 1000);
+          break;
+        case '5Y':
+          from = new Date(now.getTime() - 5 * 365 * 24 * 60 * 60 * 1000);
+          break;
+        case '10Y':
+          from = new Date(now.getTime() - 10 * 365 * 24 * 60 * 60 * 1000);
+          break;
+        case 'ALL':
+          from = null; // Get all data
+          break;
+        default:
+          // Invalid range, ignore
+          break;
+      }
+    }
 
     // Try DailyPrice first (from backfill script)
     let dailyPriceQuery = { symbol: symbol.toUpperCase() };
@@ -60,17 +105,15 @@ exports.getHistoryBySymbol = async (req, res) => {
       .sort({ date: 1 })
       .limit(limit);
 
-    // If we have DailyPrice data, use it (convert to StockHistory format)
+    // If we have DailyPrice data, use it (convert to PriceHistoryPoint format)
     if (dailyPrices.length > 0) {
       const history = dailyPrices.map(dp => ({
-        stockSymbol: dp.symbol,
-        price: dp.close,
+        time: dp.date, // YYYY-MM-DD format
         open: dp.open,
         high: dp.high,
         low: dp.low,
         close: dp.close,
         volume: dp.volume,
-        timestamp: new Date(dp.date), // Convert YYYY-MM-DD string to Date
       }));
       return res.json(history);
     }
@@ -83,9 +126,20 @@ exports.getHistoryBySymbol = async (req, res) => {
       if (to) query.timestamp.$lte = to;
     }
 
-    const history = await StockHistory.find(query)
+    const historyRecords = await StockHistory.find(query)
       .sort({ timestamp: 1 })
       .limit(limit);
+    
+    // Convert to PriceHistoryPoint format
+    const history = historyRecords.map(h => ({
+      time: h.timestamp.toISOString().split('T')[0], // YYYY-MM-DD format
+      open: h.open || h.price,
+      high: h.high || h.price,
+      low: h.low || h.price,
+      close: h.close || h.price,
+      volume: h.volume || 0,
+    }));
+    
     res.json(history);
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -137,6 +191,88 @@ exports.refreshAllStocks = async (req, res) => {
   } catch (err) {
     console.error('Error refreshing all stocks:', err);
     res.status(500).json({ message: 'Failed to refresh all stocks.', error: err.message });
+  }
+};
+
+// Get current quote for a stock symbol (used by /symbol/:symbol/quote)
+exports.getQuoteBySymbol = async (req, res) => {
+  try {
+    const { symbol } = req.params;
+    const stock = await Stock.findOne({ symbol: symbol.toUpperCase() });
+    
+    if (!stock) {
+      return res.status(404).json({ message: 'Stock not found' });
+    }
+
+    res.json({
+      symbol: stock.symbol,
+      name: stock.name,
+      price: stock.currentPrice,
+      change: stock.change || 0,
+      changePct: stock.changePct || 0,
+    });
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
+
+// Get stats for a stock symbol (used by /symbol/:symbol/stats)
+exports.getStatsBySymbol = async (req, res) => {
+  try {
+    const { symbol } = req.params;
+    const stock = await Stock.findOne({ symbol: symbol.toUpperCase() });
+    
+    if (!stock) {
+      return res.status(404).json({ message: 'Stock not found' });
+    }
+
+    // Get latest history for 52W high/low
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    
+    const history = await StockHistory.find({
+      stockSymbol: symbol.toUpperCase(),
+      timestamp: { $gte: oneYearAgo }
+    }).sort({ timestamp: 1 });
+
+    // Calculate 52W high/low
+    let high52w = stock.high || stock.currentPrice;
+    let low52w = stock.low || stock.currentPrice;
+    if (history.length > 0) {
+      const highs = history.map(h => h.high || h.price).filter(Boolean);
+      const lows = history.map(h => h.low || h.price).filter(Boolean);
+      if (highs.length > 0) high52w = Math.max(...highs);
+      if (lows.length > 0) low52w = Math.min(...lows);
+    }
+
+    // Get average volume (last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const recentHistory = await StockHistory.find({
+      stockSymbol: symbol.toUpperCase(),
+      timestamp: { $gte: thirtyDaysAgo }
+    });
+    
+    const avgVolume = recentHistory.length > 0
+      ? recentHistory.reduce((sum, h) => sum + (h.volume || 0), 0) / recentHistory.length
+      : stock.volume || 0;
+
+    res.json({
+      open: stock.open || stock.currentPrice,
+      high: stock.high || stock.currentPrice,
+      low: stock.low || stock.currentPrice,
+      volume: stock.volume || 0,
+      pe: null, // P/E ratio not available in current model
+      marketCap: null, // Market cap not available in current model
+      high52w: high52w,
+      low52w: low52w,
+      avgVolume: Math.round(avgVolume),
+      yield: null, // Yield not available
+      beta: null, // Beta not available
+      eps: null, // EPS not available
+    });
+  } catch (err) {
+    res.status(400).json({ message: err.message });
   }
 };
 
