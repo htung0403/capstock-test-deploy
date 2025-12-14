@@ -116,7 +116,14 @@ const Profile = () => {
             <h2 className="text-xl font-semibold text-gray-900">{user?.username}</h2>
             <p className="text-gray-600">{user?.email}</p>
             <p className="text-green-600 font-semibold">
-              💰 Số dư: {user?.balance?.toLocaleString() || 0} VND
+              💰 Số dư: {user?.balance != null 
+                ? new Intl.NumberFormat('en-US', {
+                    style: 'currency',
+                    currency: 'USD',
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  }).format(user.balance)
+                : '$0.00'}
             </p>
           </div>
         </div>
@@ -176,7 +183,14 @@ const Profile = () => {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-blue-50 p-4 rounded-lg">
                   <div className="text-2xl font-bold text-blue-600">
-                    {user?.balance?.toLocaleString() || 0}
+                    {user?.balance != null 
+                      ? new Intl.NumberFormat('en-US', {
+                          style: 'currency',
+                          currency: 'USD',
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        }).format(user.balance)
+                      : '$0.00'}
                   </div>
                   <div className="text-sm text-gray-600">Số dư (VND)</div>
                 </div>

@@ -403,7 +403,14 @@ function Payment() {
                 Số dư hiện tại
               </p>
               <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">
-                {`$${user?.balance?.toLocaleString() || 0}`}
+                {user?.balance != null 
+                  ? new Intl.NumberFormat('en-US', {
+                      style: 'currency',
+                      currency: 'USD',
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    }).format(user.balance)
+                  : '$0.00'}
               </p>
             </div>
             <div className="text-4xl opacity-20">💰</div>

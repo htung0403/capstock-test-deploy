@@ -37,7 +37,6 @@ function formatCurrency(n) {
   }).format(n);
 }
 
-
 export default function StockDetail() {
   const { symbol } = useParams();
   const { theme } = useTheme();
@@ -54,7 +53,6 @@ export default function StockDetail() {
   const [aiAnalysis, setAiAnalysis] = useState(null);
   const [loadingAIAnalysis, setLoadingAIAnalysis] = useState(false);
   const [aiAnalysisError, setAiAnalysisError] = useState("");
-
 
   // Order form state
   const [showOrderForm, setShowOrderForm] = useState(false);
@@ -160,7 +158,6 @@ export default function StockDetail() {
     }
   }, [symbol, show]);
 
-
   const handleSellSuccess = () => {
     // Refresh user data and portfolio after selling
     refreshUser();
@@ -178,7 +175,6 @@ export default function StockDetail() {
       const response = await api.post("/orders", orderData);
       show("success", response.data.message || "Đặt lệnh thành công!");
       setShowOrderForm(false);
-
       // Refresh data
       refreshUser();
       fetchUserHolding();
@@ -222,15 +218,29 @@ export default function StockDetail() {
 
   // Prepare chart data for lightweight-charts
   const chartData = useMemo(() => {
-    return (history || []).map((h) => ({
-      time: new Date(h.timestamp).toISOString(),
-      price: h.price,
-      open: h.open || h.price,
-      high: h.high || h.price,
-      low: h.low || h.price,
-      close: h.close || h.price,
-      volume: h.volume || 0,
-    }));
+    return (history || []).map((h) => {
+      // Handle both timestamp (Date) and time (string) formats
+      let timeValue;
+      if (h.timestamp) {
+        const date = new Date(h.timestamp);
+        timeValue = isNaN(date.getTime()) ? h.time || h.timestamp : date.toISOString();
+      } else if (h.time) {
+        timeValue = h.time;
+      } else {
+        // Fallback: use current time if no time field
+        timeValue = new Date().toISOString();
+      }
+      
+      return {
+        time: timeValue,
+        price: h.price,
+        open: h.open || h.price,
+        high: h.high || h.price,
+        low: h.low || h.price,
+        close: h.close || h.price,
+        volume: h.volume || 0,
+      };
+    });
   }, [history]);
 
   return (
@@ -380,7 +390,7 @@ export default function StockDetail() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
         <div className="card">
           <div className="card-header">
-            <div className="card-title">� Advanced Trading</div>
+            <div className="card-title">💳 Advanced Trading</div>
             <span className="card-subtle">
               Market, Limit, Stop, Stop-Limit orders
             </span>
@@ -410,6 +420,7 @@ export default function StockDetail() {
                 )}
               </div>
             )}
+
             <div className="flex gap-2">
               <button
                 className="btn btn-primary flex-1"
@@ -447,11 +458,13 @@ export default function StockDetail() {
             {loadingAIAnalysis ? "Analyzing..." : "Analyze with AI"}
           </button>
         </div>
+
         {aiAnalysisError && (
           <div className="text-red-600 dark:text-red-400 p-3">
             Error: {aiAnalysisError}
           </div>
         )}
+
         {aiAnalysis ? (
           <div className="p-4 space-y-3">
             <p>
@@ -468,6 +481,7 @@ export default function StockDetail() {
                 {aiAnalysis.sentiment}
               </span>
             </p>
+
             <p>
               <strong>Short-Term Trend:</strong>{" "}
               <span
@@ -482,6 +496,7 @@ export default function StockDetail() {
                 {aiAnalysis.price_trends.short_term_trend}
               </span>
             </p>
+
             <p>
               <strong>Long-Term Trend:</strong>{" "}
               <span
@@ -496,18 +511,21 @@ export default function StockDetail() {
                 {aiAnalysis.price_trends.long_term_trend}
               </span>
             </p>
+
             <p>
               <strong>Profit Potential:</strong>{" "}
               <span className="font-semibold text-cyan-500">
                 {aiAnalysis.profit_potential}
               </span>
             </p>
+
             <p>
               <strong>Risk Level:</strong>{" "}
               <span className="font-semibold text-orange-500">
                 {aiAnalysis.risk_level}
               </span>
             </p>
+
             {/* Enhanced display with hybrid analysis details if available */}
             {aiAnalysis.hybrid_analysis && (
               <>

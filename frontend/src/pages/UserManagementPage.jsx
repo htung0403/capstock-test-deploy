@@ -27,8 +27,13 @@ const UserManagementPage = () => {
       const response = await api.get('/admin/users');
       setUsers(response.data.users || []);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to load users');
-      show('Failed to load users', 'error');
+      console.error('Error fetching users:', err);
+      console.error('Error response:', err.response?.data);
+      console.error('Error status:', err.response?.status);
+      
+      const errorMessage = err.response?.data?.message || err.message || 'Failed to load users';
+      setError(errorMessage);
+      show(errorMessage, 'error');
     } finally {
       setLoading(false);
     }

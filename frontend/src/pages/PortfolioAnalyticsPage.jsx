@@ -5,6 +5,9 @@ import portfolioApiService from '../services/portfolioApiService';
 import api from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
 import { useToast } from '../components/Toast';
+import PortfolioSummaryCard from '../components/PortfolioSummaryCard';
+import TransactionHistoryTable from '../components/TransactionHistoryTable';
+import MiniSparkline from '../components/MiniSparkline';
 import {
   PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -26,6 +29,7 @@ const PortfolioAnalyticsPage = () => {
   const [selectedSymbol, setSelectedSymbol] = useState('');
   const [addingSymbol, setAddingSymbol] = useState(false);
   const [stockDistribution, setStockDistribution] = useState([]);
+  const [portfolioHoldings, setPortfolioHoldings] = useState([]);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -86,6 +90,11 @@ const PortfolioAnalyticsPage = () => {
 
         const fetchedStockDistribution = await portfolioApiService.getPortfolioDistributionByStock();
         setStockDistribution(fetchedStockDistribution);
+
+        // Fetch portfolio holdings for stock selection
+        const portfolioResponse = await api.get('/portfolio');
+        const holdings = portfolioResponse.data?.holdings || [];
+        setPortfolioHoldings(holdings);
       } catch (err) {
         setError('Failed to load portfolio analytics data.');
         console.error('Error fetching portfolio data:', err);
@@ -98,6 +107,7 @@ const PortfolioAnalyticsPage = () => {
       fetchPortfolioData();
     }
   }, [isAuthenticated]); // Re-fetch when authenticated
+
 
   const handleAddToWatchlist = async (e) => {
     e.preventDefault();
@@ -156,167 +166,214 @@ const PortfolioAnalyticsPage = () => {
   }
 
   return (
-    <div className="container mx-auto p-4 md:p-6 lg:p-8">
-      <h1 className="text-3xl font-bold text-gray-800 dark:text-white mb-6">
-        My Portfolio Analytics
-      </h1>
+    <div className={`min-h-screen transition-colors duration-300 ${
+      isDark 
+        ? 'bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900' 
+        : 'bg-gradient-to-br from-blue-50 via-cyan-50 to-slate-100'
+    }`}>
+      <div className="container mx-auto p-4 md:p-6 lg:p-8">
+        <h1 className={`text-3xl font-bold mb-6 ${
+          isDark ? 'text-white' : 'text-gray-800'
+        }`}>
+          My Portfolio Analytics
+        </h1>
 
-      <section className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-semibold text-gray-800 dark:text-white">My Watchlist</h2>
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-          {/* Add Stock Form */}
-          <form onSubmit={handleAddToWatchlist} className="mb-4 flex gap-2">
-            <select
-              value={selectedSymbol}
-              onChange={(e) => setSelectedSymbol(e.target.value)}
-              className={`flex-1 px-4 py-2 rounded-lg border ${
-                isDark 
-                  ? 'bg-gray-700 border-gray-600 text-white' 
-                  : 'bg-white border-gray-300 text-gray-900'
-              } focus:outline-none focus:ring-2 focus:ring-blue-500`}
-            >
-              <option value="">-- Select a stock to add --</option>
-              {availableStocks
-                .filter(stock => !watchlist.includes(stock.symbol)) // Only show stocks not in watchlist
-                .map(stock => (
-                  <option key={stock._id || stock.symbol} value={stock.symbol}>
-                    {stock.symbol} - {stock.name}
-                  </option>
-                ))}
-            </select>
-            <button
-              type="submit"
-              disabled={addingSymbol || !selectedSymbol}
-              className={`px-6 py-2 rounded-lg font-medium transition-colors ${
-                addingSymbol || !selectedSymbol
-                  ? 'bg-gray-400 cursor-not-allowed text-white'
-                  : isDark
-                  ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                  : 'bg-blue-600 hover:bg-blue-700 text-white'
-              }`}
-            >
-              {addingSymbol ? 'Adding...' : 'Add'}
-            </button>
-          </form>
+        {/* 1. Portfolio Summary */}
+        <section className="mb-8">
+          <PortfolioSummaryCard />
+        </section>
 
-          {/* Watchlist Items */}
-          {watchlistStocks.length > 0 ? (
-            <div className="space-y-2">
-              {watchlistStocks.map((stock) => (
-                <div
-                  key={stock.symbol}
-                  className={`flex items-center justify-between p-4 rounded-lg border transition-all ${
-                    isDark
-                      ? 'bg-gray-700/50 border-gray-600 hover:bg-gray-700'
-                      : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
-                  }`}
-                >
+        {/* 2. Watchlist Section with Mini Charts */}
+        <section className="mb-8">
+          <div className={`rounded-xl p-6 border transition-colors duration-300 ${
+            isDark
+              ? 'bg-white/10 border-white/20'
+              : 'bg-white/80 border-gray-200'
+          }`}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className={`text-2xl font-semibold ${
+                isDark ? 'text-white' : 'text-gray-900'
+              }`}>
+                My Watchlist
+              </h2>
+            </div>
+            
+            {/* Add Stock Form */}
+            <form onSubmit={handleAddToWatchlist} className="mb-6 flex gap-2">
+              <select
+                value={selectedSymbol}
+                onChange={(e) => setSelectedSymbol(e.target.value)}
+                className={`flex-1 px-4 py-2 rounded-lg border ${
+                  isDark 
+                    ? 'bg-gray-700 border-gray-600 text-white' 
+                    : 'bg-white border-gray-300 text-gray-900'
+                } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+              >
+                <option value="">-- Select a stock to add --</option>
+                {availableStocks
+                  .filter(stock => !watchlist.includes(stock.symbol))
+                  .map(stock => (
+                    <option key={stock._id || stock.symbol} value={stock.symbol}>
+                      {stock.symbol} - {stock.name}
+                    </option>
+                  ))}
+              </select>
+              <button
+                type="submit"
+                disabled={addingSymbol || !selectedSymbol}
+                className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                  addingSymbol || !selectedSymbol
+                    ? 'bg-gray-400 cursor-not-allowed text-white'
+                    : isDark
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                    : 'bg-blue-600 hover:bg-blue-700 text-white'
+                }`}
+              >
+                {addingSymbol ? 'Adding...' : 'Add'}
+              </button>
+            </form>
+
+            {/* Watchlist Items with Mini Charts */}
+            {watchlistStocks.length > 0 ? (
+              <div className="space-y-2">
+                {watchlistStocks.map((stock) => (
                   <Link
+                    key={stock.symbol}
                     to={`/stocks/${stock.symbol}`}
-                    className="flex-1 flex items-center justify-between group"
+                    className={`flex items-center justify-between p-4 rounded-lg border transition-all group ${
+                      isDark
+                        ? 'bg-white/5 border-white/10 hover:bg-white/10'
+                        : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                    }`}
                   >
-                    <div className="flex-1">
-                      <div className={`font-bold text-lg group-hover:text-blue-500 transition-colors ${
-                        isDark ? 'text-white' : 'text-gray-900'
-                      }`}>
-                        {stock.symbol}
+                    <div className="flex items-center gap-4 flex-1">
+                      {/* Mini Sparkline Chart */}
+                      <div className="flex-shrink-0">
+                        <MiniSparkline symbol={stock.symbol} width={80} height={30} />
                       </div>
-                      <div className={`text-sm ${
-                        isDark ? 'text-gray-400' : 'text-gray-600'
-                      }`}>
-                        {stock.name}
+                      
+                      {/* Stock Info */}
+                      <div className="flex-1">
+                        <div className={`font-bold text-lg group-hover:text-blue-500 transition-colors ${
+                          isDark ? 'text-white' : 'text-gray-900'
+                        }`}>
+                          {stock.symbol}
+                        </div>
+                        <div className={`text-sm ${
+                          isDark ? 'text-gray-400' : 'text-gray-600'
+                        }`}>
+                          {stock.name}
+                        </div>
                       </div>
                     </div>
-                    <div className="text-right mr-4">
+                    
+                    {/* Price and Change */}
+                    <div className="text-right ml-4">
                       <div className={`font-bold ${
                         isDark ? 'text-white' : 'text-gray-900'
                       }`}>
                         {stock.currentPrice > 0 ? `$${stock.currentPrice.toFixed(2)}` : 'N/A'}
                       </div>
                       {stock.change !== 0 && (
-                        <div className={`text-sm ${
+                        <div className={`text-sm font-semibold ${
                           stock.change >= 0 ? 'text-green-500' : 'text-red-500'
                         }`}>
                           {stock.change >= 0 ? '+' : ''}{stock.change.toFixed(2)} ({stock.changePct >= 0 ? '+' : ''}{stock.changePct.toFixed(2)}%)
                         </div>
                       )}
                     </div>
+                    
+                    {/* Remove Button */}
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleRemoveFromWatchlist(stock.symbol);
+                      }}
+                      className={`ml-4 px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+                        isDark
+                          ? 'bg-red-600/20 hover:bg-red-600/30 text-red-400'
+                          : 'bg-red-100 hover:bg-red-200 text-red-700'
+                      }`}
+                      title="Remove from watchlist"
+                    >
+                      ✕
+                    </button>
                   </Link>
-                  <button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      handleRemoveFromWatchlist(stock.symbol);
+                ))}
+              </div>
+            ) : (
+              <p className={`text-center py-8 ${
+                isDark ? 'text-gray-400' : 'text-gray-600'
+              }`}>
+                Your watchlist is empty. Add stocks to track them here.
+              </p>
+            )}
+          </div>
+        </section>
+
+        {/* 3. Portfolio Distribution by Stock */}
+        <section className="mb-8">
+          <h2 className={`text-2xl font-semibold mb-4 ${
+            isDark ? 'text-white' : 'text-gray-900'
+          }`}>
+            Portfolio Distribution by Stock
+          </h2>
+          <p className={`text-sm mb-4 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+            Click on a segment to view stock details
+          </p>
+          <div className={`rounded-xl p-6 border h-80 flex items-center justify-center ${
+            isDark
+              ? 'bg-white/10 border-white/20'
+              : 'bg-white/80 border-gray-200'
+          }`}>
+            {stockDistribution.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={stockDistribution}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                    label={({ name, percentage }) => `${name} (${percentage}%)`}
+                    onClick={(data) => {
+                      if (data && data.name) {
+                        navigate(`/stocks/${data.name}`);
+                      }
                     }}
-                    className={`ml-4 px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
-                      isDark
-                        ? 'bg-red-600/20 hover:bg-red-600/30 text-red-400'
-                        : 'bg-red-100 hover:bg-red-200 text-red-700'
-                    }`}
-                    title="Remove from watchlist"
+                    style={{ cursor: 'pointer' }}
                   >
-                    ✕
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className={`text-center py-8 ${
-              isDark ? 'text-gray-400' : 'text-gray-600'
-            }`}>
-              Your watchlist is empty. Add stocks to track them here.
-            </p>
-          )}
-        </div>
-      </section>
+                    {stockDistribution.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip 
+                    formatter={(value, name, props) => [
+                      `$${value.toLocaleString()}`,
+                      `${props.payload.name}: ${props.payload.percentage}%`
+                    ]}
+                  />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className={`text-center ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                No stock distribution data available. Start investing to see your portfolio distribution.
+              </p>
+            )}
+          </div>
+        </section>
 
-      <section className="mb-8">
-        <h2 className="text-2xl font-semibold text-gray-800 dark:text-white mb-4">Portfolio Distribution by Stock</h2>
-        <p className={`text-sm mb-4 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-          Click on a segment to view stock details
-        </p>
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 h-80 flex items-center justify-center">
-          {stockDistribution.length > 0 ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={stockDistribution}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                  label={({ name, percentage }) => `${name} (${percentage}%)`}
-                  onClick={(data) => {
-                    if (data && data.name) {
-                      navigate(`/stocks/${data.name}`);
-                    }
-                  }}
-                  style={{ cursor: 'pointer' }}
-                >
-                  {stockDistribution.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  formatter={(value, name, props) => [
-                    `$${value.toLocaleString()}`,
-                    `${props.payload.name}: ${props.payload.percentage}%`
-                  ]}
-                />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          ) : (
-            <p className={`text-center ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-              No stock distribution data available. Start investing to see your portfolio distribution.
-            </p>
-          )}
-        </div>
-      </section>
+        {/* 4. Transaction History - At the bottom */}
+        <section className="mb-8">
+          <TransactionHistoryTable sortBy="date" sortOrder="desc" />
+        </section>
 
+
+      </div>
     </div>
   );
 };

@@ -2,14 +2,20 @@
   File: frontend/src/pages/NewsPage.jsx
   Purpose: Professional financial news dashboard with modern UI/UX
   Date: 2025-11-17
+  Updated: 2025-01-XX - Enhanced layout, badges, filters, and UX
 */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   Search, 
   X,
   Sparkles,
-  ArrowRight
+  ArrowRight,
+  ChevronDown,
+  Filter,
+  Clock,
+  TrendingUp,
+  Flame
 } from 'lucide-react';
 import api from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
@@ -27,6 +33,12 @@ const NewsPage = () => {
   const [sortBy, setSortBy] = useState('latest');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [displayCount, setDisplayCount] = useState(12); // Initial display count
+  const [filterTime, setFilterTime] = useState('all'); // all, today, week
+  const [filterPremium, setFilterPremium] = useState(false);
+  const [filterAnalysis, setFilterAnalysis] = useState(false);
+  const [showMoreCategories, setShowMoreCategories] = useState(false);
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const { theme } = useTheme();
   const isDark = theme === 'dark';
 
@@ -49,6 +61,15 @@ const NewsPage = () => {
     
     return tabs;
   }, [categories]);
+
+  // Main categories (first 5) and more categories (rest)
+  const mainCategories = useMemo(() => {
+    return categoryTabs.slice(0, 6); // All + 5 main categories
+  }, [categoryTabs]);
+
+  const moreCategories = useMemo(() => {
+    return categoryTabs.slice(6);
+  }, [categoryTabs]);
 
   // Fetch data
   useEffect(() => {
@@ -86,12 +107,11 @@ const NewsPage = () => {
   const filteredArticles = useMemo(() => {
     let filtered = [...allArticles];
 
-    // Category filter - Use exact category ID match
+    // Category filter
     if (selectedCategory !== 'all') {
       filtered = filtered.filter(article => {
         if (!article.category) return false;
         
-        // Handle both cases: category as object (populated) or as string ID
         const categoryId = typeof article.category === 'object' 
           ? article.category._id || article.category 
           : article.category;
@@ -101,13 +121,45 @@ const NewsPage = () => {
       });
     }
 
-    // Search filter (using debounced search)
+    // Search filter
     if (debouncedSearch.trim()) {
       const query = debouncedSearch.toLowerCase();
       filtered = filtered.filter(article => 
         article.title?.toLowerCase().includes(query) ||
         article.summary?.toLowerCase().includes(query) ||
-        article.content?.toLowerCase().includes(query)
+        article.content?.toLowerCase().includes(query) ||
+        article.symbol?.toLowerCase().includes(query)
+      );
+    }
+
+    // Time filter
+    if (filterTime !== 'all') {
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+      filtered = filtered.filter(article => {
+        const articleDate = new Date(article.publishedAt || article.createdAt);
+        if (filterTime === 'today') {
+          return articleDate >= today;
+        } else if (filterTime === 'week') {
+          return articleDate >= weekAgo;
+        }
+        return true;
+      });
+    }
+
+    // Premium filter
+    if (filterPremium) {
+      filtered = filtered.filter(article => article.isPremium === true);
+    }
+
+    // Analysis filter (articles with symbol or category contains "phân tích")
+    if (filterAnalysis) {
+      filtered = filtered.filter(article => 
+        article.symbol || 
+        article.category?.category_name?.toLowerCase().includes('phân tích') ||
+        article.category?.category_name?.toLowerCase().includes('analysis')
       );
     }
 
@@ -122,9 +174,8 @@ const NewsPage = () => {
         case 'oldest':
           return dateA - dateB;
         case 'trending':
-          // Simple trending: recent + has thumbnail
-          const scoreA = (dateB - dateA) / 1000 + (a.thumbnail ? 1000 : 0);
-          const scoreB = (dateB - dateA) / 1000 + (b.thumbnail ? 1000 : 0);
+          const scoreA = (dateB - dateA) / 1000 + (a.thumbnail ? 1000 : 0) + (a.isPremium ? 500 : 0);
+          const scoreB = (dateB - dateA) / 1000 + (b.thumbnail ? 1000 : 0) + (b.isPremium ? 500 : 0);
           return scoreB - scoreA;
         default:
           return dateB - dateA;
@@ -132,40 +183,96 @@ const NewsPage = () => {
     });
 
     return filtered;
-  }, [allArticles, selectedCategory, debouncedSearch, sortBy]);
+  }, [allArticles, selectedCategory, debouncedSearch, sortBy, filterTime, filterPremium, filterAnalysis]);
 
-  // Get featured articles
+  // Get featured articles (with badges logic)
   const featuredArticles = useMemo(() => {
     const withThumbnail = filteredArticles.filter(a => a.thumbnail);
     const withoutThumbnail = filteredArticles.filter(a => !a.thumbnail);
     const sorted = [...withThumbnail, ...withoutThumbnail];
+    
+    // Determine badges for featured articles
+    const hero = sorted[0] || null;
+    const highlights = sorted.slice(1, 4).map((article, index) => {
+      // Assign badges: Breaking (recent), Editor's Pick (premium), Premium
+      let badge = null;
+      const articleDate = new Date(article.publishedAt || article.createdAt);
+      const hoursAgo = (Date.now() - articleDate.getTime()) / (1000 * 60 * 60);
+      
+      if (hoursAgo < 6) {
+        badge = { type: 'breaking', label: '🔥 Breaking', color: 'bg-red-600' };
+      } else if (article.isPremium && index === 0) {
+        badge = { type: 'editor', label: '⭐ Editor\'s Pick', color: 'bg-purple-600' };
+      } else if (article.isPremium) {
+        badge = { type: 'premium', label: '💎 Premium', color: 'bg-gradient-to-r from-yellow-500 to-amber-500' };
+      }
+      
+      return { ...article, badge };
+    });
+    
     return {
-      hero: sorted[0] || null,
-      highlights: sorted.slice(1, 5)
+      hero: hero ? {
+        ...hero,
+        badge: hero.isPremium 
+          ? { type: 'premium', label: '💎 Premium', color: 'bg-gradient-to-r from-yellow-500 to-amber-500' }
+          : null
+      } : null,
+      highlights
     };
   }, [filteredArticles]);
 
-  // Grid articles (exclude featured)
+  // Grid articles (exclude featured, with pagination)
   const gridArticles = useMemo(() => {
     const featuredIds = [
       featuredArticles.hero?._id,
       ...featuredArticles.highlights.map(a => a._id)
     ].filter(Boolean);
     
-    return filteredArticles.filter(a => !featuredIds.includes(a._id));
-  }, [filteredArticles, featuredArticles]);
+    const filtered = filteredArticles.filter(a => !featuredIds.includes(a._id));
+    return filtered.slice(0, displayCount);
+  }, [filteredArticles, featuredArticles, displayCount]);
 
+  const hasMore = useMemo(() => {
+    const featuredIds = [
+      featuredArticles.hero?._id,
+      ...featuredArticles.highlights.map(a => a._id)
+    ].filter(Boolean);
+    const totalFiltered = filteredArticles.filter(a => !featuredIds.includes(a._id)).length;
+    return displayCount < totalFiltered;
+  }, [filteredArticles, featuredArticles, displayCount]);
+
+  const loadMore = useCallback(() => {
+    setDisplayCount(prev => prev + 12);
+  }, []);
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      const categoryDropdown = event.target.closest('.category-dropdown');
+      const filterDropdown = event.target.closest('.filter-dropdown');
+      
+      if (!categoryDropdown && !filterDropdown) {
+        setShowMoreCategories(false);
+        setShowFilterDropdown(false);
+      }
+    };
+    
+    if (showMoreCategories || showFilterDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showMoreCategories, showFilterDropdown]);
 
   // Loading state
   if (loading) {
     return (
       <div className={`min-h-screen ${
-        isDark ? 'bg-[#0f172a] text-white' : 'bg-gray-50 text-gray-900'
+        isDark ? 'bg-slate-900 text-white' : 'bg-gray-50 text-gray-900'
       }`}>
         <div className="container mx-auto px-4 py-8">
           <div className="mb-8">
-            <div className={`h-12 w-64 rounded mb-4 ${isDark ? 'bg-gray-800' : 'bg-gray-200'} animate-pulse`} />
-            <div className={`h-6 w-96 rounded ${isDark ? 'bg-gray-800' : 'bg-gray-200'} animate-pulse`} />
+            <div className={`h-12 w-64 rounded mb-4 ${isDark ? 'bg-slate-800' : 'bg-gray-200'} animate-pulse`} />
+            <div className={`h-6 w-96 rounded ${isDark ? 'bg-slate-800' : 'bg-gray-200'} animate-pulse`} />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[...Array(6)].map((_, i) => (
@@ -181,7 +288,7 @@ const NewsPage = () => {
   if (error) {
     return (
       <div className={`min-h-screen flex items-center justify-center ${
-        isDark ? 'bg-[#0f172a] text-white' : 'bg-gray-50 text-gray-900'
+        isDark ? 'bg-slate-900 text-white' : 'bg-gray-50 text-gray-900'
       }`}>
         <div className="text-center">
           <p className="text-xl font-semibold mb-2 text-red-500">{error}</p>
@@ -202,30 +309,70 @@ const NewsPage = () => {
 
   return (
     <div className={`min-h-screen ${
-      isDark ? 'bg-[#0f172a] text-white' : 'bg-gray-50 text-gray-900'
+      isDark ? 'bg-slate-900 text-white' : 'bg-gray-50 text-gray-900'
     }`}>
-    
+      {/* ============================================
+          TIER 1: HERO / FEATURED SECTION
+          ============================================ */}
+      {featuredArticles.hero && (
+        <div className={`border-b ${
+          isDark ? 'border-slate-800/50' : 'border-gray-200'
+        }`}>
+          <div className="container mx-auto px-4 py-8">
+            <div className="flex items-center gap-2 mb-4">
+              <Sparkles className={`w-5 h-5 ${isDark ? 'text-yellow-400' : 'text-yellow-500'}`} />
+              <h2 className={`text-2xl font-bold ${
+                isDark ? 'text-white' : 'text-gray-900'
+              }`}>
+                NỔI BẬT
+              </h2>
+            </div>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
+              {/* Hero Card - Full width on large screens */}
+              <div className="lg:col-span-2">
+                <HeroCard article={featuredArticles.hero} isDark={isDark} />
+              </div>
 
-      {/* Category Navigation - Sticky */}
+              {/* Highlights - 2-3 cards on the right */}
+              <div className="flex flex-col gap-3">
+                {featuredArticles.highlights.map((article) => (
+                  <HighlightCard 
+                    key={article._id} 
+                    article={article} 
+                    isDark={isDark}
+                    badge={article.badge}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================
+          TIER 2: CATEGORY NAV + SEARCH
+          ============================================ */}
       <div className={`sticky top-0 z-50 border-b backdrop-blur-md ${
         isDark 
-          ? 'bg-[#0f172a]/95 border-gray-800' 
+          ? 'bg-slate-900/95 border-slate-800' 
           : 'bg-white/95 border-gray-200'
       }`}>
         <div className="container mx-auto px-4 py-4">
-          {/* Primary Tabs */}
-          <div className="flex gap-2 overflow-x-auto scrollbar-hide mb-4 pb-2 scroll-smooth">
-            {categoryTabs.map((tab) => (
+          {/* Category Navigation */}
+          <div className="flex items-center gap-2 mb-4 overflow-x-auto scrollbar-hide scroll-smooth">
+            {/* Main Categories */}
+            {mainCategories.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setSelectedCategory(tab.id)}
-                className={`px-6 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+                className={`px-5 py-2.5 rounded-full text-sm font-semibold whitespace-nowrap transition-all duration-200 ${
                   selectedCategory === tab.id
                     ? isDark
-                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20'
-                      : 'bg-blue-500 text-white shadow-lg'
+                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30 ring-2 ring-blue-400/50'
+                      : 'bg-blue-500 text-white shadow-lg ring-2 ring-blue-300/50'
                     : isDark
-                      ? 'text-gray-400 hover:text-white hover:bg-gray-800/50'
+                      ? 'text-gray-400 hover:text-white hover:bg-slate-800/50'
                       : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                 }`}
                 aria-label={`Filter by ${tab.name}`}
@@ -233,9 +380,66 @@ const NewsPage = () => {
                 {tab.name}
               </button>
             ))}
+
+            {/* More Categories Dropdown */}
+            {moreCategories.length > 0 && (
+              <div className="relative category-dropdown">
+                <button
+                  onClick={() => {
+                    setShowMoreCategories(!showMoreCategories);
+                    setShowFilterDropdown(false);
+                  }}
+                  className={`px-5 py-2.5 rounded-full text-sm font-semibold whitespace-nowrap transition-all duration-200 flex items-center gap-1 ${
+                    showMoreCategories
+                      ? isDark
+                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
+                        : 'bg-blue-500 text-white shadow-lg'
+                      : isDark
+                        ? 'text-gray-400 hover:text-white hover:bg-slate-800/50'
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  }`}
+                >
+                  Thêm <ChevronDown className={`w-4 h-4 transition-transform ${showMoreCategories ? 'rotate-180' : ''}`} />
+                </button>
+
+                {/* Dropdown Menu */}
+                {showMoreCategories && moreCategories.length > 0 && (
+                  <div 
+                    className={`absolute top-full left-0 mt-2 rounded-lg shadow-xl border z-[60] min-w-[200px] max-h-[300px] overflow-y-auto ${
+                      isDark
+                        ? 'bg-slate-800 border-slate-700'
+                        : 'bg-white border-gray-200'
+                    }`}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {moreCategories.map((tab) => (
+                      <button
+                        key={tab.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedCategory(tab.id);
+                          setShowMoreCategories(false);
+                        }}
+                        className={`w-full text-left px-4 py-2.5 text-sm font-medium transition-colors first:rounded-t-lg last:rounded-b-lg ${
+                          selectedCategory === tab.id
+                            ? isDark
+                              ? 'bg-blue-600/20 text-blue-400'
+                              : 'bg-blue-50 text-blue-600'
+                            : isDark
+                              ? 'text-gray-300 hover:bg-slate-700'
+                              : 'text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        {tab.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* Secondary Filters */}
+          {/* Search & Filters */}
           <div className="flex flex-col sm:flex-row gap-3">
             {/* Search */}
             <div className="relative flex-1">
@@ -244,14 +448,14 @@ const NewsPage = () => {
               }`} />
               <input
                 type="text"
-                placeholder="Tìm kiếm bài viết..."
+                placeholder="Tìm theo cổ phiếu (AAPL), chủ đề (AI), thị trường (VN-Index)..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className={`w-full pl-10 pr-10 py-2 rounded-lg border ${
+                className={`w-full pl-10 pr-10 py-2.5 rounded-lg border ${
                   isDark
-                    ? 'bg-gray-800/50 border-gray-700 text-white placeholder-gray-500'
+                    ? 'bg-slate-800/50 border-slate-700 text-white placeholder-gray-500'
                     : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'
-                } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                } focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all`}
                 aria-label="Search articles"
               />
               {searchQuery && (
@@ -267,15 +471,98 @@ const NewsPage = () => {
               )}
             </div>
 
+            {/* Filter Button */}
+            <div className="relative filter-dropdown">
+              <button
+                onClick={() => {
+                  setShowFilterDropdown(!showFilterDropdown);
+                  setShowMoreCategories(false);
+                }}
+                className={`px-4 py-2.5 rounded-lg border flex items-center gap-2 ${
+                  isDark
+                    ? 'bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700'
+                    : 'bg-white border-gray-300 text-gray-900 hover:bg-gray-50'
+                } transition-colors ${(filterTime !== 'all' || filterPremium || filterAnalysis) ? 'ring-2 ring-blue-500' : ''}`}
+              >
+                <Filter className="w-4 h-4" />
+                <span className="text-sm font-medium">Lọc</span>
+              </button>
+
+              {/* Filter Dropdown */}
+              {showFilterDropdown && (
+                <div className={`absolute top-full right-0 mt-2 rounded-lg shadow-xl border z-50 min-w-[250px] p-4 ${
+                  isDark
+                    ? 'bg-slate-800 border-slate-700'
+                    : 'bg-white border-gray-200'
+                }`}>
+                <div className="space-y-3">
+                  {/* Time Filter */}
+                  <div>
+                    <label className={`block text-xs font-semibold mb-2 ${
+                      isDark ? 'text-gray-400' : 'text-gray-600'
+                    }`}>
+                      ⏱ Thời gian
+                    </label>
+                    <select
+                      value={filterTime}
+                      onChange={(e) => setFilterTime(e.target.value)}
+                      className={`w-full px-3 py-2 rounded-md border text-sm ${
+                        isDark
+                          ? 'bg-slate-700 border-slate-600 text-white'
+                          : 'bg-gray-50 border-gray-300 text-gray-900'
+                      } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                    >
+                      <option value="all">Tất cả</option>
+                      <option value="today">Hôm nay</option>
+                      <option value="week">Tuần này</option>
+                    </select>
+                  </div>
+
+                  {/* Premium Filter */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="filterPremium"
+                      checked={filterPremium}
+                      onChange={(e) => setFilterPremium(e.target.checked)}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 rounded"
+                    />
+                    <label htmlFor="filterPremium" className={`text-sm font-medium cursor-pointer ${
+                      isDark ? 'text-gray-300' : 'text-gray-700'
+                    }`}>
+                      💎 Premium only
+                    </label>
+                  </div>
+
+                  {/* Analysis Filter */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="filterAnalysis"
+                      checked={filterAnalysis}
+                      onChange={(e) => setFilterAnalysis(e.target.checked)}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 rounded"
+                    />
+                    <label htmlFor="filterAnalysis" className={`text-sm font-medium cursor-pointer ${
+                      isDark ? 'text-gray-300' : 'text-gray-700'
+                    }`}>
+                      📊 Analysis only
+                    </label>
+                  </div>
+                </div>
+                </div>
+              )}
+            </div>
+
             {/* Sort */}
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
-              className={`px-4 py-2 rounded-lg border ${
+              className={`px-4 py-2.5 rounded-lg border ${
                 isDark
-                  ? 'bg-gray-800/50 border-gray-700 text-white'
+                  ? 'bg-slate-800/50 border-slate-700 text-white'
                   : 'bg-white border-gray-300 text-gray-900'
-              } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+              } focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium`}
               aria-label="Sort articles"
             >
               <option value="latest">Mới nhất</option>
@@ -286,44 +573,14 @@ const NewsPage = () => {
         </div>
       </div>
 
-      {/* Main Content */}
+      {/* ============================================
+          TIER 3: CONTENT FEED
+          ============================================ */}
       <div className="container mx-auto px-4 py-8">
-        {/* Featured Section */}
-        {featuredArticles.hero && (
-          <div className="mb-6">
-            <div className="flex items-center gap-2 mb-3">
-              <Sparkles className={`w-4 h-4 ${isDark ? 'text-yellow-400' : 'text-yellow-500'}`} />
-              <h2 className={`text-xl font-bold ${
-                isDark ? 'text-white' : 'text-gray-900'
-              }`}>
-                NỔI BẬT
-              </h2>
-            </div>
-            
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
-              {/* Hero Card */}
-              <div className="lg:col-span-2">
-                <HeroCard article={featuredArticles.hero} isDark={isDark} />
-              </div>
-
-              {/* Highlights */}
-              <div className="flex flex-col gap-3">
-                {featuredArticles.highlights.slice(0, 2).map((article) => (
-                  <HighlightCard 
-                    key={article._id} 
-                    article={article} 
-                    isDark={isDark} 
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* News Grid */}
-        {filteredArticles.length === 0 ? (
+        {gridArticles.length === 0 ? (
           <div className="text-center py-20">
-            <p className={`text-xl font-medium mb-2 ${
+            <p className={`text-xl font-semibold mb-2 ${
               isDark ? 'text-gray-400' : 'text-gray-600'
             }`}>
               {searchQuery ? 'Không tìm thấy bài viết nào' : 'Không có bài viết nào'}
@@ -335,20 +592,38 @@ const NewsPage = () => {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {gridArticles.map((article) => (
-              <NewsCard key={article._id} article={article} isDark={isDark} />
-            ))}
-          </div>
-        )}
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {gridArticles.map((article) => (
+                <NewsCard key={article._id} article={article} isDark={isDark} />
+              ))}
+            </div>
 
-        {/* Results Count */}
-        {filteredArticles.length > 0 && (
-          <div className={`mt-8 text-center text-sm ${
-            isDark ? 'text-gray-400' : 'text-gray-600'
-          }`}>
-            Hiển thị {filteredArticles.length} / {allArticles.length} bài viết
-          </div>
+            {/* Load More Button */}
+            {hasMore && (
+              <div className="mt-8 text-center">
+                <button
+                  onClick={loadMore}
+                  className={`px-6 py-3 rounded-lg font-semibold transition-all duration-200 ${
+                    isDark
+                      ? 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-700'
+                      : 'bg-white hover:bg-gray-50 text-gray-900 border border-gray-300'
+                  } shadow-md hover:shadow-lg`}
+                >
+                  Tải thêm bài viết
+                </button>
+              </div>
+            )}
+
+            {/* Results Count */}
+            {filteredArticles.length > 0 && (
+              <div className={`mt-6 text-center text-sm ${
+                isDark ? 'text-gray-400' : 'text-gray-600'
+              }`}>
+                Hiển thị {gridArticles.length} / {filteredArticles.length} bài viết
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -359,7 +634,7 @@ const NewsPage = () => {
           isDark
             ? 'bg-blue-600 hover:bg-blue-700 text-white'
             : 'bg-blue-500 hover:bg-blue-600 text-white'
-        } hover:scale-110`}
+        } hover:scale-110 z-40`}
         aria-label="Scroll to top"
       >
         <ArrowRight className="w-5 h-5 rotate-[-90deg]" />

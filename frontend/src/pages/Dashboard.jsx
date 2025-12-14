@@ -85,10 +85,20 @@ const Dashboard = () => {
     setPortfolioLoading(true); // Start loading before API call
     try {
       const response = await api.get("/portfolio");
-      setPortfolio(response.data.holdings || []); // Correctly set portfolio to the holdings array
+      setPortfolio(response.data?.holdings || []); // Correctly set portfolio to the holdings array
+      // Clear error if successful
+      if (error && error.includes('portfolio')) {
+        setError("");
+      }
     } catch (err) {
       console.error("Failed to fetch portfolio for Dashboard:", err);
-      setError("Failed to load portfolio for Dashboard."); // Set an error message
+      // Only show error if it's not a 404 (new user without portfolio)
+      if (err.response?.status !== 404) {
+        setError("Failed to load portfolio for Dashboard.");
+      } else {
+        // New user, set empty portfolio
+        setPortfolio([]);
+      }
     } finally {
       setPortfolioLoading(false);
     }
@@ -383,14 +393,25 @@ const Dashboard = () => {
                             <div className={`text-lg font-bold transition-colors duration-300 ${
                               isDark ? 'text-white' : 'text-gray-900'
                             }`}>
-                              ${totalValue.toFixed(2)}
+                              {new Intl.NumberFormat('en-US', {
+                                style: 'currency',
+                                currency: 'USD',
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              }).format(totalValue)}
                             </div>
                             <div className={`text-sm font-medium ${
                               totalProfit >= 0 
                                 ? isDark ? 'text-green-400' : 'text-green-600'
                                 : isDark ? 'text-red-400' : 'text-red-600'
                             }`}>
-                              {totalProfit >= 0 ? '+' : ''}${totalProfit.toFixed(2)}
+                              {totalProfit >= 0 ? '+' : ''}
+                              {new Intl.NumberFormat('en-US', {
+                                style: 'currency',
+                                currency: 'USD',
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              }).format(totalProfit)}
                             </div>
                           </div>
                         </div>
@@ -492,7 +513,7 @@ const Dashboard = () => {
                           ? isDark ? 'text-green-400' : 'text-green-600'
                           : isDark ? 'text-red-400' : 'text-red-600'
                       }`}>
-                        {transaction.type === 'BUY' ? '-' : '+'}${transaction.amount.toFixed(2)}
+                        {transaction.type === 'BUY' ? '-' : '+'}${(transaction.totalAmount || transaction.amount || 0).toFixed(2)}
                       </div>
                     </div>
                   ))}
